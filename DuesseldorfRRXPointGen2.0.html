@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Düsseldorf RRX Point Generator</title>
+<style id="pageStyle">@page { size: A4; margin: 0; }</style>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f8f9fb; --dark:#f1f3f7; --grid:#e5e8ef;
+    --muted:#697086; --text:#111827; --green:#16a34a; --cyan:#0891b2;
+    --cyan-f:#dbf5fa; --orange:#ea580c; --pink:#db2777; --red:#dc2626; --purple:#7c3aed;
+    --ink:#18181b;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Segoe UI",Arial,sans-serif; overflow:hidden;
+  }
+  /* ── Sidebar: floating glass card over the canvas ───────── */
+  #panel{
+    position:fixed; top:16px; left:16px; bottom:16px; width:320px;
+    z-index:10; overflow-y:auto; padding:18px 18px 24px;
+    background:rgba(255,255,255,0.62);
+    backdrop-filter:blur(20px) saturate(180%);
+    -webkit-backdrop-filter:blur(20px) saturate(180%);
+    border:1px solid rgba(255,255,255,0.7);
+    border-radius:16px;
+    box-shadow:0 8px 32px rgba(20,20,40,0.10), 0 1.5px 4px rgba(20,20,40,0.06);
+  }
+  #panel h1{
+    font-size:13px; letter-spacing:.5px; color:var(--ink);
+    margin:0 0 4px; font-weight:700;
+  }
+  #panel .subtitle{ font-size:10px; color:var(--muted); margin:0 0 16px; }
+  .section{
+    font-size:10px; color:var(--muted); letter-spacing:.6px;
+    margin:16px 0 6px; text-transform:uppercase;
+  }
+  .ctrl{ margin-bottom:10px; }
+  .ctrl label{ display:block; font-size:12px; margin-bottom:4px; }
+  .ctrl-row{ display:flex; align-items:center; gap:8px; }
+  .ctrl-row input[type=number]{
+    width:64px; background:rgba(255,255,255,0.7); color:var(--text); border:1px solid #d7dbe4;
+    border-radius:3px; padding:5px 6px; font-family:"Consolas","Courier New",monospace;
+    font-size:12px;
+  }
+  select{
+    width:100%; background:rgba(255,255,255,0.7); color:var(--text); border:1px solid #d7dbe4;
+    border-radius:6px; padding:7px 8px; font-family:inherit; font-size:12px; cursor:pointer;
+  }
+
+  /* ── Modern slider ───────────────────────────────────── */
+  .ctrl-row input[type=range]{
+    flex:1; -webkit-appearance:none; appearance:none;
+    height:4px; border-radius:2px; background:#d8dae2; outline:none; cursor:pointer;
+  }
+  .ctrl-row input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:15px; height:15px; border-radius:50%;
+    background:var(--ink); border:2px solid #fff;
+    box-shadow:0 1px 3px rgba(0,0,0,0.35); cursor:pointer;
+    margin-top:-1px;
+  }
+  .ctrl-row input[type=range]::-moz-range-track{
+    height:4px; border-radius:2px; background:#d8dae2;
+  }
+  .ctrl-row input[type=range]::-moz-range-thumb{
+    width:15px; height:15px; border-radius:50%;
+    background:var(--ink); border:2px solid #fff;
+    box-shadow:0 1px 3px rgba(0,0,0,0.35); cursor:pointer;
+  }
+
+  .calc-box{ background:rgba(241,243,247,0.7); border:1px solid #e2e5ec; border-radius:8px; padding:8px 10px; }
+  .calc-row{
+    display:flex; justify-content:space-between; padding:2px 0;
+    font-size:12px;
+  }
+  .calc-row .k{ color:var(--muted); }
+  .calc-row .v{ font-weight:700; }
+  button.tool{
+    display:block; width:100%; background:rgba(255,255,255,0.55); border:1px solid #e2e5ec;
+    border-radius:8px; padding:9px 8px; margin-bottom:6px; font-weight:700;
+    font-size:12px; cursor:pointer; font-family:inherit; color:var(--ink);
+    transition:background .15s ease;
+  }
+  button.tool:hover{ background:rgba(255,255,255,0.85); }
+  button.tool.mini{ display:inline-block; width:auto; margin:0; padding:5px 10px; font-size:11px; }
+  .ctrl-row input[type=color]{
+    width:36px; height:28px; padding:2px; border:1px solid #d7dbe4; border-radius:6px;
+    background:rgba(255,255,255,0.7); cursor:pointer;
+  }
+  .ctrl-row input[type=text]{
+    flex:1; min-width:0; background:rgba(255,255,255,0.7); color:var(--text); border:1px solid #d7dbe4;
+    border-radius:3px; padding:5px 6px; font-family:"Consolas","Courier New",monospace; font-size:12px;
+  }
+  .legend{ background:rgba(241,243,247,0.7); border:1px solid #e2e5ec; border-radius:8px; padding:8px 10px; }
+  .legend-row{
+    display:flex; align-items:center; gap:8px; padding:4px 0;
+    font-size:11.5px; border-bottom:1px solid #e2e5ec;
+  }
+  .legend-row:last-child{ border-bottom:none; }
+  .legend-dot{
+    width:11px; height:11px; border-radius:50%; flex:0 0 auto;
+    border:2px solid currentColor; background:transparent;
+  }
+  .legend-txt{ color:var(--text); flex:1; }
+  .legend-val{ font-weight:700; white-space:nowrap; }
+
+  .tag{
+    margin-top:18px; padding-top:10px; border-top:1px solid #e2e5ec;
+    font-size:9.5px; letter-spacing:.4px; color:var(--muted); text-align:center;
+  }
+
+  /* ── Window area: right of the sidebar, windows are tiled by JS ── */
+  #stage{ position:fixed; top:16px; left:352px; right:16px; bottom:16px; }
+  .win{
+    position:absolute; display:flex; flex-direction:column; overflow:hidden;
+    background:#ffffff; border:1px solid #e2e5ec; border-radius:12px;
+    box-shadow:0 4px 18px rgba(20,20,40,0.07), 0 1px 3px rgba(20,20,40,0.05);
+  }
+  .win-head{
+    flex:0 0 32px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 6px 0 12px; border-bottom:1px solid #e2e5ec; background:var(--panel);
+    font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); font-weight:700;
+  }
+  .win-actions{ display:flex; align-items:center; gap:6px; }
+  .export-pick{ display:flex; flex-wrap:wrap; gap:6px; }
+  .export-pick .win-opt{ height:26px; padding:0 11px; font-size:10.5px; }
+  .win-opt{
+    height:22px; padding:0 9px; border:1px solid #d7dbe4; border-radius:11px; background:#fff;
+    color:var(--muted); font:600 10px "Segoe UI",Arial,sans-serif; letter-spacing:.4px; text-transform:uppercase; cursor:pointer;
+  }
+  .win-opt:hover{ border-color:var(--ink); color:var(--ink); }
+  .win-opt.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
+  .win-close{
+    width:22px; height:22px; border:none; border-radius:6px; background:transparent;
+    color:var(--muted); font-size:16px; line-height:20px; cursor:pointer; padding:0;
+  }
+  .win-close:hover{ background:#e5e8ef; color:var(--ink); }
+  .win canvas{ display:block; flex:1 1 auto; width:100%; min-height:0; }
+  .win-bar{
+    flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 12px;
+    border-bottom:1px solid #e2e5ec;
+  }
+  .win-bar input{
+    flex:1; min-width:0; background:#fff; color:var(--text); border:1px solid #d7dbe4; border-radius:6px;
+    padding:6px 8px; font-family:inherit; font-size:13px;
+  }
+  .win-bar input:focus{ outline:none; border-color:var(--ink); }
+  .win-bar:has(+ .win-bar){ border-bottom:none; }
+  .win-bar + .win-bar{ padding-top:0; }
+  .win-bar input.num{ flex:0 0 76px; font-family:"Consolas","Courier New",monospace; font-size:12px; }
+  .win-bar input[type=range]{
+    flex:0 1 220px; min-width:80px; padding:0; border:none; -webkit-appearance:none; appearance:none;
+    height:4px; border-radius:2px; background:#d8dae2; cursor:pointer;
+  }
+  .win-bar input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--ink); border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .win-bar .bar-sep{ width:1px; height:18px; background:#e2e5ec; margin:0 4px; }
+  .win-bar #text_points{ margin-left:auto; white-space:nowrap; }
+  .win-bar select.letter-pick{ width:auto; flex:0 0 auto; padding:5px 8px; font-size:12px; }
+  .win-bar #letter_info{ margin-left:auto; white-space:nowrap; }
+  #win_letter canvas{ cursor:grab; }
+  #win_letter canvas.dragging{ cursor:grabbing; }
+  #win_text canvas{ cursor:grab; }
+  #win_text canvas.dragging{ cursor:grabbing; }
+  .win-bar .count{ font-size:11px; color:var(--muted); font-family:"Consolas","Courier New",monospace; }
+  #stageEmpty{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    font-size:12px; color:var(--muted);
+  }
+  button.tool.win-toggle{ display:flex; justify-content:space-between; align-items:center; font-weight:600; }
+  button.tool.win-toggle .state{ font-size:10px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted); }
+  button.tool.win-toggle.open .state{ color:var(--green); }
+
+  /* ── Print ───────────────────────────────────────────── */
+  #printArea{ display:none; }
+  @media print{
+    body *{ visibility:hidden; }
+    #printArea, #printArea *{ visibility:visible; }
+    #printArea{ display:block; position:absolute; top:0; left:0; }
+    #printArea svg{ display:block; break-after:page; page-break-after:always; }
+    #printArea svg:last-child{ break-after:auto; page-break-after:auto; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="panel">
+    <h1>DÜSSELDORF RRX POINT GENERATOR</h1>
+    <p class="subtitle">V1.0</p>
+
+    <div class="section">Windows</div>
+    <button class="tool win-toggle" data-key="single"><span>Single point</span><span class="state"></span></button>
+    <button class="tool win-toggle" data-key="grid"><span>5×3 grid</span><span class="state"></span></button>
+    <button class="tool win-toggle" data-key="strip"><span>Gradient strip</span><span class="state"></span></button>
+    <button class="tool win-toggle" data-key="text"><span>Text</span><span class="state"></span></button>
+    <button class="tool win-toggle" data-key="letter"><span>Letter</span><span class="state"></span></button>
+
+    <div class="section">Parameters</div>
+
+    <div class="ctrl">
+      <label>Boundary diameter (mm)</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_big_d" min="10" max="300" step="1">
+        <input type="number" id="n_big_d" min="10" max="300" step="1">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Fill circle diameter (mm)</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_small_d" min="1" max="100" step="0.5">
+        <input type="number" id="n_small_d" min="1" max="100" step="0.5">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Horizontal edge gap (mm)</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_h_gap" min="0" max="50" step="0.5">
+        <input type="number" id="n_h_gap" min="0" max="50" step="0.5">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Vertical spacing c-to-c (mm)</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_v_sp" min="0" max="100" step="0.5">
+        <input type="number" id="n_v_sp" min="0" max="100" step="0.5">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Horizontal stagger angle (deg)</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_angle" min="0" max="89" step="0.5">
+        <input type="number" id="n_angle" min="0" max="89" step="0.5">
+      </div>
+    </div>
+
+    <div class="section">Gradient strip</div>
+    <div class="ctrl">
+      <label>Columns per segment</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_strip_cols" min="1" max="30" step="1">
+        <input type="number" id="n_strip_cols" min="1" max="30" step="1">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Number of rows</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_strip_rows" min="1" max="40" step="1">
+        <input type="number" id="n_strip_rows" min="1" max="40" step="1">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Segment 2 size (% of boundary diameter)</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_strip_s2" min="5" max="100" step="1">
+        <input type="number" id="n_strip_s2" min="5" max="100" step="1">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Segment 3 size (% of boundary diameter)</label>
+      <div class="ctrl-row">
+        <input type="range" id="r_strip_s3" min="5" max="100" step="1">
+        <input type="number" id="n_strip_s3" min="5" max="100" step="1">
+      </div>
+    </div>
+
+    <div class="section">Calculated</div>
+    <div class="calc-box">
+      <div class="calc-row"><span class="k">H pitch (c-to-c):</span><span class="v" id="c_pitch">--</span></div>
+      <div class="calc-row"><span class="k">H edge gap:</span><span class="v" id="c_hgap">--</span></div>
+      <div class="calc-row"><span class="k">V spacing (c-to-c):</span><span class="v" id="c_vsp">--</span></div>
+      <div class="calc-row"><span class="k">V edge (neg=overlap):</span><span class="v" id="c_vgap">--</span></div>
+      <div class="calc-row"><span class="k">Row stagger:</span><span class="v" id="c_stag">--</span></div>
+      <div class="calc-row"><span class="k">Fill circles:</span><span class="v" id="c_count">--</span></div>
+      <div class="calc-row strip-calc" style="display:none"><span class="k">Strip ⌀ seg 1 (100%):</span><span class="v" id="c_strip_d1">--</span></div>
+      <div class="calc-row strip-calc" style="display:none"><span class="k">Strip ⌀ seg 2:</span><span class="v" id="c_strip_d2">--</span></div>
+      <div class="calc-row strip-calc" style="display:none"><span class="k">Strip ⌀ seg 3:</span><span class="v" id="c_strip_d3">--</span></div>
+      <div class="calc-row strip-calc" style="display:none"><span class="k">Strip circles · fill dots:</span><span class="v" id="c_strip_count">--</span></div>
+    </div>
+
+    <div class="section">Tools</div>
+    <div class="ctrl" style="margin-bottom:6px;">
+      <label>Fill point colour</label>
+      <div class="ctrl-row">
+        <input type="color" id="fill_color">
+        <input type="text" id="fill_color_hex" maxlength="7" spellcheck="false">
+        <button class="tool mini" id="btn_fill_reset" title="Back to the default cyan">Reset</button>
+      </div>
+    </div>
+    <div class="ctrl" style="margin-bottom:8px;">
+      <label>Export windows</label>
+      <div class="export-pick">
+        <button class="win-opt on" data-export="single">Single point</button>
+        <button class="win-opt on" data-export="grid">5×3 grid</button>
+        <button class="win-opt on" data-export="strip">Gradient strip</button>
+        <button class="win-opt on" data-export="text">Text</button>
+        <button class="win-opt on" data-export="letter">Letter</button>
+      </div>
+    </div>
+    <button class="tool" id="btn_png">Export PNG (one file per window)</button>
+    <div class="ctrl" style="margin-bottom:6px;">
+      <label>Print paper size</label>
+      <select id="paper_size">
+        <option value="A4">A4 (210 × 297 mm)</option>
+        <option value="A3">A3 (297 × 420 mm)</option>
+      </select>
+    </div>
+    <div class="ctrl" style="margin-bottom:6px;">
+      <label>Print scale</label>
+      <select id="print_scale">
+        <option value="auto">Auto (best fit)</option>
+        <option value="1">1:1 (actual size)</option>
+        <option value="0.5">1:2</option>
+        <option value="0.4">1:2.5</option>
+        <option value="0.2">1:5</option>
+        <option value="0.1">1:10</option>
+        <option value="0.05">1:20</option>
+        <option value="0.04">1:25</option>
+        <option value="0.02">1:50</option>
+        <option value="0.01">1:100</option>
+      </select>
+    </div>
+    <button class="tool" id="btn_pdf">Print / Save as PDF (one page per window, to scale)</button>
+
+    <div class="section">Legend</div>
+    <div class="legend" id="legend"></div>
+
+    <div class="tag">code by studiogruber</div>
+  </div>
+
+  <div id="stage">
+    <div class="win" id="win_single">
+      <div class="win-head"><span>Single point</span><div class="win-actions"><button class="win-opt" data-outline="single" title="Show outlines">Outline</button><button class="win-close" data-key="single" title="Close window">×</button></div></div>
+      <canvas></canvas>
+    </div>
+    <div class="win" id="win_grid">
+      <div class="win-head"><span>5×3 grid</span><div class="win-actions"><button class="win-opt" data-outline="grid" title="Show outlines">Outline</button><button class="win-close" data-key="grid" title="Close window">×</button></div></div>
+      <canvas></canvas>
+    </div>
+    <div class="win" id="win_strip">
+      <div class="win-head"><span>Gradient strip</span><div class="win-actions"><button class="win-opt" data-outline="strip" title="Show outlines">Outline</button><button class="win-close" data-key="strip" title="Close window">×</button></div></div>
+      <canvas></canvas>
+    </div>
+    <div class="win" id="win_text">
+      <div class="win-head"><span>Text</span><div class="win-actions"><button class="win-opt" data-outline="text" title="Show outlines">Outline</button><button class="win-close" data-key="text" title="Close window">×</button></div></div>
+      <div class="win-bar">
+        <input type="text" id="text_input" maxlength="15" placeholder="Type up to 15 characters…" spellcheck="false" autocomplete="off">
+        <span class="count" id="text_count">0/15</span>
+        <label class="count" for="text_height" title="Cap height of the letters in real size">Height</label>
+        <input type="number" id="text_height" class="num" min="100" max="20000" step="10" value="2000">
+        <span class="count">mm</span>
+      </div>
+      <div class="win-bar">
+        <span class="count">Zoom</span>
+        <input type="range" id="text_zoom" min="1" max="20" step="0.1" value="1">
+        <span class="count" id="text_zoom_val">100%</span>
+        <button class="win-opt" id="text_zoom_reset" title="Fit the text to the window">Fit</button>
+        <span class="bar-sep"></span>
+        <span class="count">Show</span>
+        <button class="win-opt on" data-seg="0" title="Show / hide these points">100%</button>
+        <button class="win-opt on" data-seg="1" title="Show / hide these points">75%</button>
+        <button class="win-opt on" data-seg="2" title="Show / hide these points">50%</button>
+        <span class="count" id="text_points"></span>
+      </div>
+      <canvas></canvas>
+    </div>
+    <div class="win" id="win_letter">
+      <div class="win-head"><span>Letter</span><div class="win-actions"><button class="win-opt" data-outline="letter" title="Show outlines">Outline</button><button class="win-close" data-key="letter" title="Close window">×</button></div></div>
+      <div class="win-bar">
+        <label class="count" for="letter_pick">Letter</label>
+        <select id="letter_pick" class="letter-pick"></select>
+        <button class="win-opt" id="letter_fit" title="Fit the letter to the window">Fit</button>
+        <span class="count" id="letter_info"></span>
+      </div>
+      <canvas></canvas>
+    </div>
+    <div id="stageEmpty">All windows are closed. Reopen them from the sidebar.</div>
+  </div>
+
+  <div id="printArea"></div>
+
+<script>
+(function(){
+  "use strict";
+  const COL = {
+    BG:"#ffffff", PANEL:"#f8f9fb", DARK:"#f1f3f7", GRID:"#e5e8ef",
+    MUTED:"#697086", TEXT:"#111827", GREEN:"#16a34a", CYAN:"#0891b2",
+    ORANGE:"#ea580c", PINK:"#db2777", RED:"#dc2626", PURPLE:"#7c3aed", GREY:"#6b7280"
+  };
+
+  const params = { big_d:80, small_d:12, h_gap:0, v_sp:6, angle:30,
+                   strip_cols:6, strip_rows:8, strip_s2:75, strip_s3:50 };
+
+  // ── Colours: default infill colour (picker + Reset start from it) ──
+  
+  const FILL_DEFAULT = "#FFA500";  // default infill colour (orange)
+
+  const STRIP_COL = [FILL_DEFAULT, FILL_DEFAULT, FILL_DEFAULT];
+
+  // ── Wire up controls ───────────────────────────────────────
+  const fields = [
+    ["big_d",   "r_big_d",   "n_big_d"],
+    ["small_d", "r_small_d", "n_small_d"],
+    ["h_gap",   "r_h_gap",   "n_h_gap"],
+    ["v_sp",    "r_v_sp",    "n_v_sp"],
+    ["angle",   "r_angle",   "n_angle"],
+    ["strip_cols", "r_strip_cols", "n_strip_cols"],
+    ["strip_rows", "r_strip_rows", "n_strip_rows"],
+    ["strip_s2",   "r_strip_s2",   "n_strip_s2"],
+    ["strip_s3",   "r_strip_s3",   "n_strip_s3"],
+  ];
+  for (const [key, rid, nid] of fields) {
+    const r = document.getElementById(rid), n = document.getElementById(nid);
+    r.value = params[key]; n.value = params[key];
+    r.addEventListener("input", () => { n.value = r.value; params[key] = parseFloat(r.value); requestRender(); });
+    n.addEventListener("input", () => {
+      let v = parseFloat(n.value);
+      if (Number.isNaN(v)) return;
+      r.value = v; params[key] = v; requestRender();
+    });
+  }
+
+  // ── Windows: each draws its scene groups or its own draw function ──
+  const WINDOWS = [
+    { key:"single", title:"Single point",   groups:["boundary","fill","baseline","dim_h_pitch","dim_h_gap","dim_v_sp","bar","crosshair"] },
+    { key:"grid",   title:"5×3 grid",       groups:["grid","gridFill"] },
+    { key:"strip",  title:"Gradient strip", groups:["strip1","strip2","strip3","stripFill1","stripFill2","stripFill3","stripDim","stripLabel"] },
+    { key:"text",   title:"Text",           groups:[], draw: (g, w, h) => drawTextWindow(g, w, h) },
+    { key:"letter", title:"Letter",         groups:[], draw: (g, w, h) => drawLetterWindow(g, w, h) },
+  ];
+  const winOpen = { single:true, grid:true, strip:true, text:true, letter:true };
+
+  function updateWinButtons() {
+    for (const b of document.querySelectorAll(".win-toggle")) {
+      const isOpen = winOpen[b.dataset.key];
+      b.classList.toggle("open", isOpen);
+      b.querySelector(".state").textContent = isOpen ? "open" : "closed";
+    }
+  }
+  function setWindow(key, open) {
+    winOpen[key] = open;
+    updateWinButtons();
+    render();
+  }
+  updateWinButtons();
+
+  // ── Outlines: off by default, toggled per window ──
+  const outlineOn = { single:false, grid:false, strip:false, text:false, letter:false };
+  const OUTLINE_GROUPS = {
+    single: ["boundary", "fill"],
+    grid:   ["grid"],
+    strip:  ["strip1", "strip2", "strip3"],
+    letter: ["letterRings"],
+  };
+  const OUTLINE_WIN = {};
+  for (const k in OUTLINE_GROUPS) for (const gname of OUTLINE_GROUPS[k]) OUTLINE_WIN[gname] = k;
+  function outlineHidden(group) {
+    const k = OUTLINE_WIN[group];
+    return k !== undefined && !outlineOn[k];
+  }
+  for (const b of document.querySelectorAll(".win-opt[data-outline]")) {
+    b.addEventListener("click", () => {
+      const k = b.dataset.outline;
+      outlineOn[k] = !outlineOn[k];
+      b.classList.toggle("on", outlineOn[k]);
+      b.title = outlineOn[k] ? "Hide outlines" : "Show outlines";
+      render();
+    });
+  }
+  for (const b of document.querySelectorAll(".win-toggle")) {
+    b.addEventListener("click", () => setWindow(b.dataset.key, !winOpen[b.dataset.key]));
+  }
+  for (const b of document.querySelectorAll(".win-close")) {
+    b.addEventListener("click", () => setWindow(b.dataset.key, false));
+  }
+
+  document.getElementById("btn_png").addEventListener("click", exportPNG);
+  document.getElementById("btn_pdf").addEventListener("click", exportPDF);
+
+  // ── Geometry (ported 1:1 from the spray-bar model) ─────────
+  function clampedParams() {
+    const big_d   = Math.max(10, params.big_d);
+    const small_d = Math.max(1, Math.min(params.small_d, big_d * 0.95));
+    const h_gap   = Math.max(0, params.h_gap);
+    const v_sp    = Math.max(0.5, params.v_sp);
+    const angle   = Math.max(0, Math.min(params.angle, 89));
+    const clampInt = (v, lo, hi, dflt) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : dflt;
+    const strip = {
+      on:   winOpen.strip,
+      cols: clampInt(params.strip_cols, 1, 30, 6),
+      rows: clampInt(params.strip_rows, 1, 40, 8),
+      pct:  [100, clampInt(params.strip_s2, 5, 100, 75), clampInt(params.strip_s3, 5, 100, 50)],
+    };
+    return { big_d, small_d, h_gap, v_sp, angle, strip };
+  }
+
+  function geometry(p) {
+    const R = p.big_d / 2, r = p.small_d / 2, pitch = p.small_d + p.h_gap;
+    const a_rad = p.angle * Math.PI / 180;
+    return { R, r, pitch, v_sp: p.v_sp, a_rad, bar_dx: Math.cos(a_rad), bar_dy: Math.sin(a_rad) };
+  }
+
+  // Fill circles inside a boundary of radius R (spray-bar model, exact index range per row).
+  function fillDisk(R, g) {
+    const { r, pitch, v_sp, bar_dx, bar_dy } = g;
+    const fill = [];
+    let tooDense = false;
+    const bar_dx_safe = Math.max(Math.abs(bar_dx), 1e-6);
+    const estCellArea = pitch * v_sp * bar_dx_safe;
+    const estCount = Math.PI * R * R / Math.max(estCellArea, 1e-9);
+    const MAX_POINTS = 20000;
+    if (estCount > MAX_POINTS) {
+      tooDense = true;
+    } else {
+      const lim_k = Math.floor(R / (v_sp * bar_dx_safe)) + 1;
+      for (let k = -lim_k; k <= lim_k; k++) {
+        const disc = R*R - k*k*v_sp*v_sp*bar_dx*bar_dx;
+        if (disc < 0) continue;
+        const sq = Math.sqrt(disc);
+        const nMin = (bar_dy*k*v_sp - sq) / pitch;
+        const nMax = (bar_dy*k*v_sp + sq) / pitch;
+        const n0 = Math.ceil(nMin - 1e-9), n1 = Math.floor(nMax + 1e-9);
+        for (let n = n0; n <= n1; n++) {
+          const x = n * pitch * bar_dx;
+          const y = -k * v_sp + n * pitch * bar_dy;
+          if (Math.hypot(x, y) + r <= R) fill.push({ t:"circle", x, y, r });
+          if (fill.length > MAX_POINTS) { tooDense = true; break; }
+        }
+        if (tooDense) break;
+      }
+    }
+    if (tooDense) fill.length = 0;
+    return { fill, tooDense };
+  }
+
+  function buildScene(p) {
+    const g = geometry(p);
+    const { R, r, pitch, v_sp, a_rad, bar_dx, bar_dy } = g;
+    const a_deg = a_rad * 180 / Math.PI;
+    const small_d = p.small_d, h_gap = p.h_gap;
+
+    const elems = { boundary:[], fill:[], baseline:[], dim_h_pitch:[], dim_h_gap:[], dim_v_sp:[], bar:[], crosshair:[], grid:[], gridFill:[],
+                    strip1:[], strip2:[], strip3:[], stripFill1:[], stripFill2:[], stripFill3:[], stripDim:[], stripLabel:[] };
+
+    elems.boundary.push({ t:"circle", x:0, y:0, r:R });
+
+    const mainFill = fillDisk(R, g);
+    elems.fill = mainFill.fill;
+    const tooDense = mainFill.tooDense;
+
+    const half = 3;
+    // Reference bars, laid out from the geometry so nothing overlaps.
+    const pinkSpread  = half * pitch * Math.abs(bar_dy);
+    const clearMargin = Math.max(small_d, pitch) * 1.8 + 4;
+    const pink_cy = R + clearMargin + v_sp + pinkSpread;
+    const pink_nozzles = [];
+    for (let n = -half; n <= half; n++) pink_nozzles.push([n * pitch * bar_dx, pink_cy + n * pitch * bar_dy]);
+
+    for (const [nx, ny] of pink_nozzles) elems.bar.push({ t:"circle", x:nx, y:ny, r });
+    const p0 = pink_nozzles[0], p1 = pink_nozzles[pink_nozzles.length - 1];
+    elems.bar.push({ t:"line", x0:p0[0], y0:p0[1], x1:p1[0], y1:p1[1] });
+    elems.bar.push({ t:"line_dash", x0:p0[0], y0:p0[1]-v_sp, x1:p1[0], y1:p1[1]-v_sp });
+    for (const [nx, ny] of pink_nozzles) elems.bar.push({ t:"circle", x:nx, y:ny - v_sp, r });
+
+    const dim_vx = p1[0] + r * 2.5;
+    elems.dim_v_sp.push({ t:"dim_v", x:dim_vx, y0:pink_cy - v_sp, y1:pink_cy, label:`V  ${v_sp.toFixed(2)} mm` });
+    elems.dim_v_sp.push({ t:"line", x0:0, y0:pink_cy, x1:dim_vx, y1:pink_cy });
+    elems.dim_v_sp.push({ t:"line", x0:0, y0:pink_cy - v_sp, x1:dim_vx, y1:pink_cy - v_sp });
+
+    if (a_deg > 0.5) {
+      const angleOff = pitch * 0.6;
+      elems.bar.push({ t:"text_r", x:p1[0] - bar_dy*angleOff, y:p1[1] + bar_dx*angleOff, label:`${a_deg.toFixed(1)} deg` });
+    }
+
+    const viz_y = pink_cy + pinkSpread + clearMargin;
+    for (let i = -half; i <= half; i++) elems.baseline.push({ t:"circle", x:i*pitch, y:viz_y, r });
+    elems.baseline.push({ t:"line", x0:-(half+0.8)*pitch, y0:viz_y, x1:(half+0.8)*pitch, y1:viz_y });
+
+    const dimGap = Math.max(small_d, pitch) * 0.5 + 3;
+    if (h_gap > 0.01) {
+      elems.dim_h_gap.push({ t:"dim_h", x0:r, x1:pitch - r, y:viz_y + r*1.8, label:`${h_gap.toFixed(2)} mm (edge gap)` });
+    }
+    elems.dim_h_pitch.push({ t:"dim_h", x0:0, x1:pitch, y: viz_y + r*1.8 + (h_gap > 0.01 ? dimGap : 0), label:`${pitch.toFixed(2)} mm (pitch)` });
+
+    const s = small_d * 0.4;
+    elems.crosshair.push({ t:"line", x0:-s, y0:0, x1:s, y1:0 });
+    elems.crosshair.push({ t:"line", x0:0, y0:-s, x1:0, y1:s });
+
+    // Gradient segments (100 / s2 / s3 %): real size, exact fill pattern per segment.
+    const MAX_DRAW = 60000;
+    const pct = p.strip.pct;
+    const segR = pct.map(v => R * v / 100);
+    const segFill = segR.map(Rs => fillDisk(Rs, g));
+    const segPatterns = segFill.map(f => f.fill);
+    const segPitch = p.big_d + h_gap;
+    const gridGap = R * 0.8;
+
+    // 5×3 grid: one column per segment, same pitch.
+    const preGridBounds = computeBounds(elems);
+    const startY = preGridBounds.minY - gridGap - R;
+    const gridTooDense = 5 * segPatterns.reduce((a, pt) => a + 1 + pt.length, 0) > MAX_DRAW;
+    for (let gi = 0; gi < 3; gi++) {
+      for (let gj = 0; gj < 5; gj++) {
+        const cx = (gi - 1) * segPitch;
+        const cy = startY - gj * segPitch;
+        elems.grid.push({ t:"circle", x:cx, y:cy, r: segR[gi] });
+        if (gridTooDense) continue;
+        for (const f of segPatterns[gi]) elems.gridFill.push({ t:"circle", x: cx + f.x, y: cy + f.y, r: f.r });
+      }
+    }
+
+    // Gradient strip: square grid of main circles right of the drawing.
+    const strip = { on: false, tooDense: false, d: segR.map(Rs => Rs * 2), counts: [0, 0, 0], total: 0,
+                    fillPer: segFill.map(f => f.fill.length), fillDense: segFill.map(f => f.tooDense), fillTotal: 0,
+                    pitch: segPitch };
+    if (p.strip && p.strip.on) {
+      const { cols, rows } = p.strip;
+      strip.on = true;
+      const perSeg = cols * rows;
+      const drawCount = segPatterns.reduce((a, pt) => a + perSeg * (1 + pt.length), 0);
+      if (drawCount > MAX_DRAW) {
+        strip.tooDense = true;
+      } else {
+        const preStripBounds = computeBounds(elems);
+        const xStart = preStripBounds.maxX + gridGap * 2 + R;
+        const yTopRow = (rows - 1) / 2 * segPitch;
+        const rings = [elems.strip1, elems.strip2, elems.strip3];
+        const fills = [elems.stripFill1, elems.stripFill2, elems.stripFill3];
+        const cxOf = j => xStart + j * segPitch;
+        for (let j = 0; j < cols * 3; j++) {
+          const s = Math.floor(j / cols);
+          for (let k = 0; k < rows; k++) {
+            const cx = cxOf(j), cy = yTopRow - k * segPitch;
+            rings[s].push({ t:"circle", x: cx, y: cy, r: segR[s] });
+            for (const f of segPatterns[s]) fills[s].push({ t:"circle", x: cx + f.x, y: cy + f.y, r: f.r });
+          }
+        }
+        strip.counts = [perSeg, perSeg, perSeg];
+        strip.total = perSeg * 3;
+        strip.fillTotal = perSeg * (strip.fillPer[0] + strip.fillPer[1] + strip.fillPer[2]);
+
+        const sGap = R * 1.8;
+        const yBottom = -yTopRow - R;
+        for (let s = 0; s < 3; s++) {
+          const cx = cxOf(s * cols);
+          rings[s].push({ t:"dim_h", x0: cx - segR[s], x1: cx + segR[s], y: yBottom - sGap,
+                          label: `⌀ ${strip.d[s].toFixed(2)} mm` });
+        }
+        if (cols * 3 >= 2) {
+          const jm = Math.floor((cols * 3 - 2) / 2);
+          elems.stripDim.push({ t:"dim_h", x0: cxOf(jm), x1: cxOf(jm + 1), y: yBottom - sGap * 2,
+                                label: `${strip.pitch.toFixed(2)} mm pitch, all segments` });
+        }
+        elems.stripLabel.push({ t:"text", x: cxOf(0) - R, y: yTopRow + R + sGap * 0.6,
+          label: `Gradient strip · ⌀ ${strip.d.map(v => v.toFixed(2)).join(" / ")} mm · pitch ${strip.pitch.toFixed(2)} mm` });
+      }
+    }
+
+    return { elems, R, r, pitch, v_sp, viz_y, small_d, tooDense, gridTooDense, strip,
+             segFills: segPatterns, segR };
+  }
+
+  // Bounding box over all drawn primitives.
+  function computeBounds(elems) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    function grow(x, y, pad) {
+      pad = pad || 0;
+      if (x - pad < minX) minX = x - pad;
+      if (x + pad > maxX) maxX = x + pad;
+      if (y - pad < minY) minY = y - pad;
+      if (y + pad > maxY) maxY = y + pad;
+    }
+    for (const group in elems) {
+      for (const it of elems[group]) {
+        if (it.t === "circle") grow(it.x, it.y, it.r);
+        else if (it.t === "line" || it.t === "line_dash") { grow(it.x0, it.y0); grow(it.x1, it.y1); }
+        else if (it.t === "dim_h") { grow(it.x0, it.y, 10); grow(it.x1, it.y, 10); }
+        else if (it.t === "dim_v") { grow(it.x, it.y0, 10); grow(it.x, it.y1, 10); }
+        else if (it.t === "text_r" || it.t === "text") grow(it.x, it.y, 8);
+        else if (it.t === "glyph") { grow(it.bx0, it.by0); grow(it.bx1, it.by1); }
+      }
+    }
+    return { minX, maxX, minY, maxY };
+  }
+
+  // ── Canvas rendering ────────────────────────────────────────
+  const stage = document.getElementById("stage");
+
+  // Tiles the open windows into rows (shared by the UI and the PNG export).
+  function layoutRects(keys, W, H, gap) {
+    const rects = {};
+    const ROWS = [
+      { keys: ["single", "grid"], wt: 1 },
+      { keys: ["strip"],          wt: 1 },
+      { keys: ["text", "letter"], wt: 1 },
+    ];
+    const COL_WT = { text: 2 };
+    const rows = ROWS.map(r => ({ keys: r.keys.filter(k => keys.includes(k)), wt: r.wt }))
+                     .filter(r => r.keys.length);
+    const totalWt = rows.reduce((a, r) => a + r.wt, 0);
+    const availH = H - gap * (rows.length - 1);
+    let y = 0;
+    rows.forEach((row, ri) => {
+      const h = ri === rows.length - 1 ? H - y : Math.round(availH * row.wt / totalWt);
+      const availW = W - gap * (row.keys.length - 1);
+      const cw = row.keys.reduce((a, k) => a + (COL_WT[k] || 1), 0);
+      let x = 0;
+      row.keys.forEach(k => {
+        const w = availW * (COL_WT[k] || 1) / cw;
+        rects[k] = { x, y, w, h };
+        x += w + gap;
+      });
+      y += h + gap;
+    });
+    return rects;
+  }
+
+  function openKeys() { return WINDOWS.filter(wd => winOpen[wd.key]).map(wd => wd.key); }
+
+  function subScene(scene, groups) {
+    const elems = {};
+    for (const gname in scene.elems) if (groups.includes(gname)) elems[gname] = scene.elems[gname];
+    return { elems, r: scene.r };
+  }
+  function visibleGroups() {
+    return WINDOWS.filter(wd => winOpen[wd.key]).flatMap(wd => wd.groups);
+  }
+  function hasShapes(sub) {
+    for (const gname in sub.elems) if (sub.elems[gname].length) return true;
+    return false;
+  }
+
+  function drawWindowContent(g, sub, w, h, pad) {
+    g.fillStyle = COL.BG;
+    g.fillRect(0, 0, w, h);
+    if (hasShapes(sub)) {
+      drawSceneShapes(g, sub, w, h, pad);
+    } else {
+      g.font = "12px Segoe UI"; g.textAlign = "center"; g.fillStyle = COL.MUTED;
+      g.fillText("Too many dots to draw: enlarge the fill circle or spacing, or reduce columns / rows", w / 2, h / 2);
+    }
+  }
+
+  // ── Text window: real-size text (cap height in mm) filled with gradient points ──
+  const TEXT_FONT_FAMILY = "Arial, \"Helvetica Neue\", Helvetica, sans-serif";
+  const TEXT_MAX_CELLS = 250000;
+  const textInput = document.getElementById("text_input");
+  const textCount = document.getElementById("text_count");
+  const textHeightIn = document.getElementById("text_height");
+  const textZoomIn = document.getElementById("text_zoom");
+  const textZoomVal = document.getElementById("text_zoom_val");
+  const textPointsEl = document.getElementById("text_points");
+  const textSegBtns = Array.from(document.querySelectorAll("#win_text .win-opt[data-seg]"));
+  const textSegOn = [true, true, true];
+  const textView = { zoom: 1, panX: 0, panY: 0 };
+  const textMask = document.createElement("canvas");
+  const textMaskCtx = textMask.getContext("2d", { willReadFrequently: true });
+  let textModelCache = null;
+
+  function textHeightMm() {
+    const v = parseFloat(textHeightIn.value);
+    return Number.isFinite(v) ? Math.max(100, Math.min(20000, v)) : 2000;
+  }
+
+  // Text model in mm (cached): letters, points and counts.
+  function getTextModel() {
+    const p = clampedParams();
+    const txt = textInput.value;
+    const capH = textHeightMm();
+    const pitch = p.big_d + p.h_gap;
+    const dMax = p.big_d;
+    const pct = p.strip.pct;
+    const key = [txt, capH, pitch, dMax, pct.join("/")].join("|");
+    if (textModelCache && textModelCache.key === key) return textModelCache;
+
+    const model = { key, txt, capH, pitch, dMax, pct, dots: [], counts: [0, 0, 0], total: 0,
+                    chars: [], fontMm: 0, width: 0, top: 0, bottom: 0, tooMany: false, empty: !txt.trim() };
+    textModelCache = model;
+    if (model.empty) return model;
+
+    const mc = textMaskCtx;
+    const REF = 100;
+    mc.font = `${REF}px ${TEXT_FONT_FAMILY}`;
+    const capRef = mc.measureText("H").actualBoundingBoxAscent || REF * 0.716;
+    const fontMm = REF * capH / capRef;
+    model.fontMm = fontMm;
+    const k = fontMm / REF;
+    // no kerning: each letter sits on its own advance width
+    let x = 0, top = -capH, bottom = 0;
+    for (const ch of txt) {
+      const m = mc.measureText(ch);
+      model.chars.push({ ch, x, left: x - m.actualBoundingBoxLeft * k, right: x + m.actualBoundingBoxRight * k });
+      top = Math.min(top, -m.actualBoundingBoxAscent * k);
+      bottom = Math.max(bottom, m.actualBoundingBoxDescent * k);
+      x += m.width * k;
+    }
+    model.width = x; model.top = top; model.bottom = bottom;
+
+    const cells = (x / pitch + 2) * ((bottom - top) / pitch + 2);
+    if (cells > TEXT_MAX_CELLS) { model.tooMany = true; return model; }
+
+    const s = 8 / pitch;
+    const W = Math.max(1, Math.ceil(x * s) + 4), H = Math.max(1, Math.ceil((bottom - top) * s) + 4);
+    textMask.width = W; textMask.height = H;
+    mc.font = `${(fontMm * s).toFixed(3)}px ${TEXT_FONT_FAMILY}`;
+    mc.textAlign = "left"; mc.textBaseline = "alphabetic"; mc.fillStyle = "#000";
+    const ox = 2, oy = 2 - top * s;
+    const gx0 = pitch / 2, gy0 = -capH + pitch / 2;
+    const kStart = Math.floor((top - gy0) / pitch), kEnd = Math.ceil((bottom - gy0) / pitch);
+    const taken = new Set();
+    for (let ci = 0; ci < model.chars.length; ci++) {
+      const c = model.chars[ci];
+      if (!c.ch.trim()) continue;
+      const span = Math.max(c.right - c.left, 1e-6);
+      const bx0 = Math.max(0, Math.floor(ox + c.left * s) - 1), bx1 = Math.min(W, Math.ceil(ox + c.right * s) + 1);
+      if (bx1 <= bx0) continue;
+      mc.clearRect(0, 0, W, H);
+      mc.fillText(c.ch, ox + c.x * s, oy);
+      const bw = bx1 - bx0, data = mc.getImageData(bx0, 0, bw, H).data;
+      const jStart = Math.ceil((c.left - gx0) / pitch), jEnd = Math.floor((c.right - gx0) / pitch);
+      for (let j = jStart; j <= jEnd; j++) {
+        const px = gx0 + j * pitch;
+        const t = (px - c.left) / span;
+        const seg = t < 1 / 3 ? 0 : t < 2 / 3 ? 1 : 2;
+        for (let kk = kStart; kk <= kEnd; kk++) {
+          const py = gy0 + kk * pitch;
+          const ix = Math.round(ox + px * s) - bx0, iy = Math.round(oy + py * s);
+          if (ix < 0 || ix >= bw || iy < 0 || iy >= H) continue;
+          if (data[(iy * bw + ix) * 4 + 3] < 128) continue;
+          const id = j + "," + kk;
+          if (taken.has(id)) continue;
+          taken.add(id);
+          model.dots.push({ x: px, y: py, seg, ci });
+          model.counts[seg]++;
+        }
+      }
+    }
+    model.total = model.dots.length;
+    return model;
+  }
+
+  function drawTextWindow(g, w, h) {
+    g.fillStyle = COL.BG;
+    g.fillRect(0, 0, w, h);
+    const model = getTextModel();
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = "12px Segoe UI"; g.fillStyle = COL.MUTED;
+    if (model.empty || model.tooMany) {
+      g.fillText(model.empty ? "Type in the bar above to preview the text"
+        : "Too many points: reduce the height or enlarge the boundary diameter", w / 2, h / 2);
+      g.textBaseline = "alphabetic";
+      return;
+    }
+    g.textBaseline = "alphabetic";
+
+    const tw = model.width, th = model.bottom - model.top;
+    const sc = Math.min(w * 0.9 / Math.max(tw, 1e-6), h * 0.8 / Math.max(th, 1e-6)) * textView.zoom;
+    const offX = w / 2 - (tw / 2) * sc + textView.panX;
+    const offY = h / 2 - (model.top + th / 2) * sc + textView.panY;
+
+    g.fillStyle = fillHex;
+    for (let seg = 0; seg < 3; seg++) {
+      if (!textSegOn[seg]) continue;
+      const rd = model.dMax / 2 * model.pct[seg] / 100 * sc;
+      g.beginPath();
+      for (const d of model.dots) {
+        if (d.seg !== seg) continue;
+        const cx = offX + d.x * sc, cy = offY + d.y * sc;
+        if (cx < -rd || cx > w + rd || cy < -rd || cy > h + rd) continue;
+        g.moveTo(cx + rd, cy); g.arc(cx, cy, rd, 0, Math.PI * 2);
+      }
+      g.fill();
+    }
+
+    if (outlineOn.text) {
+      g.font = `${(model.fontMm * sc).toFixed(2)}px ${TEXT_FONT_FAMILY}`;
+      g.textAlign = "left"; g.lineJoin = "round";
+      g.strokeStyle = LINE; g.lineWidth = 1;
+      for (const c of model.chars) if (c.ch.trim()) g.strokeText(c.ch, offX + c.x * sc, offY);
+    }
+
+    g.font = "11px Segoe UI"; g.textAlign = "left"; g.fillStyle = COL.MUTED;
+    haloText(g, 10, h - 10, `Cap height ${model.capH.toFixed(0)} mm · text width ${(model.width / 1000).toFixed(2)} m`, COL.MUTED, "left");
+    const barPx = 1000 * sc;
+    if (barPx > 20 && barPx < w - 300) {
+      const bx = w - 10 - barPx, by = h - 12;
+      g.fillStyle = "rgba(255,255,255,0.88)"; g.fillRect(bx - 4, by - 18, barPx + 8, 26);
+      g.strokeStyle = LINE; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + barPx, by);
+      g.moveTo(bx, by - 4); g.lineTo(bx, by + 4); g.moveTo(bx + barPx, by - 4); g.lineTo(bx + barPx, by + 4);
+      g.stroke();
+      haloText(g, bx + barPx / 2, by - 6, "1 m", COL.MUTED, "center");
+    }
+  }
+
+  function updateTextBar() {
+    const model = getTextModel();
+    textCount.textContent = `${textInput.value.length}/15`;
+    model.pct.forEach((v, i) => { textSegBtns[i].textContent = v + "%"; });
+    textPointsEl.textContent = model.empty ? "" : model.tooMany ? "too many points"
+      : `${model.counts.join(" / ")} · ${model.total} points`;
+    textZoomVal.textContent = Math.round(textView.zoom * 100) + "%";
+  }
+
+  function redrawTextWindow() {
+    updateTextBar();
+    redrawWindow("text");
+  }
+  const setTextZoom = attachPanZoom("text", textView, 20, () => {
+    textZoomIn.value = textView.zoom;
+    redrawTextWindow();
+  });
+
+  textInput.addEventListener("input", requestTextRefresh);
+  textHeightIn.addEventListener("input", requestTextRefresh);
+  textZoomIn.addEventListener("input", () => setTextZoom(parseFloat(textZoomIn.value)));
+  document.getElementById("text_zoom_reset").addEventListener("click", () => setTextZoom(1));
+  textSegBtns.forEach((b, i) => b.addEventListener("click", () => {
+    textSegOn[i] = !textSegOn[i];
+    b.classList.toggle("on", textSegOn[i]);
+    redrawTextWindow();
+    redrawWindow("letter");
+  }));
+
+  // ── Letter window: one letter with the real infill of every point ──
+  const LETTER_MAX_FILL = 200000;
+  const letterPick = document.getElementById("letter_pick");
+  const letterInfo = document.getElementById("letter_info");
+  const letterView = { zoom: 1, panX: 0, panY: 0 };
+  let letterIdx = -1;
+  let letterCache = null;
+
+  function refreshLetterOptions() {
+    const tm = getTextModel();
+    const valid = [];
+    tm.chars.forEach((c, i) => { if (c.ch.trim()) valid.push(i); });
+    const sig = tm.txt;
+    if (letterPick.dataset.sig !== sig) {
+      letterPick.innerHTML = valid.map(i => `<option value="${i}">${i + 1}: ${esc(tm.chars[i].ch)}</option>`).join("");
+      letterPick.dataset.sig = sig;
+    }
+    if (!valid.includes(letterIdx)) letterIdx = valid.length ? valid[0] : -1;
+    if (letterIdx >= 0) letterPick.value = String(letterIdx);
+  }
+
+  // Selected letter as a mm scene: main circles, fill circles, glyph outline.
+  function getLetterData() {
+    refreshLetterOptions();
+    const tm = getTextModel();
+    const sc = lastScene && lastScene.scene;
+    const empty = { elems: { letterRings: [], letterFill: [], letterGlyph: [] }, r: 1, ok: false, tm };
+    if (!sc || tm.empty || tm.tooMany || letterIdx < 0 || !tm.chars[letterIdx]) return empty;
+    const key = [tm.key, letterIdx, textSegOn.join(""), outlineOn.letter, sceneCache ? sceneCache.key : ""].join("|");
+    if (letterCache && letterCache.key === key) return letterCache;
+
+    const c = tm.chars[letterIdx];
+    const dots = tm.dots.filter(d => d.ci === letterIdx);
+    const counts = [0, 0, 0];
+    for (const d of dots) counts[d.seg]++;
+    const fillPer = sc.segFills.map(f => f.length);
+    const fillTotal = counts.reduce((a, n, s) => a + n * fillPer[s], 0);
+    const shown = dots.filter(d => textSegOn[d.seg]);
+    const shownFill = shown.reduce((a, d) => a + fillPer[d.seg], 0);
+    const tooMany = shownFill > LETTER_MAX_FILL;
+
+    const elems = { letterRings: [], letterFill: [], letterGlyph: [] };
+    for (const d of shown) {
+      const cx = d.x, cy = -d.y;
+      elems.letterRings.push({ t:"circle", x: cx, y: cy, r: sc.segR[d.seg] });
+      if (!tooMany) for (const f of sc.segFills[d.seg]) elems.letterFill.push({ t:"circle", x: cx + f.x, y: cy + f.y, r: f.r });
+    }
+    if (outlineOn.letter) {
+      elems.letterGlyph.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm,
+                               bx0: c.left, by0: -tm.bottom, bx1: c.right, by1: -tm.top });
+    }
+    const R0 = sc.segR[0];
+    let bx0 = c.left, bx1 = c.right, by0 = -tm.bottom, by1 = -tm.top;
+    for (const d of dots) {
+      bx0 = Math.min(bx0, d.x - R0); bx1 = Math.max(bx1, d.x + R0);
+      by0 = Math.min(by0, -d.y - R0); by1 = Math.max(by1, -d.y + R0);
+    }
+    letterCache = { key, elems, r: R0, ok: true, tm, ch: c.ch, idx: letterIdx, counts, fillPer, fillTotal,
+                    total: dots.length, tooMany, box: { bx0, bx1, by0, by1 } };
+    return letterCache;
+  }
+
+  function drawLetterWindow(g, w, h) {
+    g.fillStyle = COL.BG;
+    g.fillRect(0, 0, w, h);
+    const L = getLetterData();
+    updateLetterBar(L);
+    if (!L.ok) {
+      g.font = "12px Segoe UI"; g.textAlign = "center"; g.fillStyle = COL.MUTED;
+      g.fillText(L.tm.tooMany ? "Too many points in the text" : "Type a text to inspect a letter", w / 2, h / 2);
+      return;
+    }
+    const { bx0, bx1, by0, by1 } = L.box;
+    const bw = Math.max(bx1 - bx0, 1e-6), bh = Math.max(by1 - by0, 1e-6);
+    const sc = Math.min(w * 0.9 / bw, h * 0.85 / bh) * letterView.zoom;
+    const ox = w / 2 - (bx0 + bw / 2) * sc + letterView.panX;
+    const oy = h / 2 + (by0 + bh / 2) * sc + letterView.panY;
+    const P = (x, y) => [ox + x * sc, oy - y * sc];
+    const visible = (x, y, r) => x > -r && x < w + r && y > -r && y < h + r;
+
+    g.beginPath();
+    for (const f of L.elems.letterFill) {
+      const [x, y] = P(f.x, f.y), r = f.r * sc;
+      if (!visible(x, y, r)) continue;
+      g.moveTo(x + r, y); g.arc(x, y, r, 0, Math.PI * 2);
+    }
+    g.fillStyle = fillHex; g.fill();
+    if (outlineOn.letter) {
+      g.strokeStyle = LINE;
+      g.beginPath();
+      for (const c of L.elems.letterRings) {
+        const [x, y] = P(c.x, c.y), r = c.r * sc;
+        if (!visible(x, y, r)) continue;
+        g.moveTo(x + r, y); g.arc(x, y, r, 0, Math.PI * 2);
+      }
+      g.lineWidth = 1; g.stroke();
+      for (const gl of L.elems.letterGlyph) {
+        const [x, y] = P(gl.x, gl.y);
+        g.font = `${(gl.size * sc).toFixed(2)}px ${TEXT_FONT_FAMILY}`;
+        g.textAlign = "left"; g.textBaseline = "alphabetic"; g.lineJoin = "round";
+        g.lineWidth = 1.5; g.strokeText(gl.ch, x, y);
+      }
+    } else if (L.tooMany) {
+      g.beginPath();
+      for (const c of L.elems.letterRings) {
+        const [x, y] = P(c.x, c.y), r = c.r * sc;
+        if (!visible(x, y, r)) continue;
+        g.moveTo(x + r, y); g.arc(x, y, r, 0, Math.PI * 2);
+      }
+      g.fill();
+    }
+
+    haloText(g, 10, h - 10, `"${L.ch}" · ${((bx1 - bx0) / 1000).toFixed(2)} × ${((by1 - by0) / 1000).toFixed(2)} m` +
+      (L.tooMany ? " · too many fill circles to draw, showing main circles" : ""), COL.MUTED, "left");
+  }
+
+  function updateLetterBar(L) {
+    letterInfo.textContent = !L || !L.ok ? "" :
+      `${L.counts.join(" / ")} · ${L.total} points · ${L.fillTotal.toLocaleString("de-AT")} fill circles`;
+  }
+
+  const setLetterZoom = attachPanZoom("letter", letterView, 60, () => redrawWindow("letter"));
+  letterPick.addEventListener("change", () => {
+    letterIdx = parseInt(letterPick.value, 10);
+    setLetterZoom(1);
+  });
+  document.getElementById("letter_fit").addEventListener("click", () => setLetterZoom(1));
+
+  // ── Shared window helpers ──
+  function redrawWindow(key) {
+    const el = document.getElementById("win_" + key);
+    if (!winOpen[key] || el.style.display === "none") return;
+    const wd = WINDOWS.find(w => w.key === key);
+    const cv = el.querySelector("canvas");
+    const dpr = window.devicePixelRatio || 1;
+    const g = cv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (wd.draw) wd.draw(g, cv.clientWidth, cv.clientHeight);
+    else drawWindowContent(g, subScene(lastScene.scene, wd.groups), cv.clientWidth, cv.clientHeight, 24);
+  }
+
+  // Wheel zoom (at the cursor) + drag pan; returns setZoom(z, ax?, ay?).
+  function attachPanZoom(key, view, maxZoom, onChange) {
+    const cv = document.querySelector(`#win_${key} canvas`);
+    function setZoom(z, ax, ay) {
+      const cw = cv.clientWidth, ch = cv.clientHeight;
+      z = Math.max(1, Math.min(maxZoom, z));
+      const dx = (ax !== undefined ? ax : cw / 2) - cw / 2, dy = (ay !== undefined ? ay : ch / 2) - ch / 2;
+      const f = z / view.zoom;
+      view.panX = dx - f * (dx - view.panX);
+      view.panY = dy - f * (dy - view.panY);
+      view.zoom = z;
+      if (z === 1) { view.panX = 0; view.panY = 0; }
+      onChange();
+    }
+    let drag = null;
+    cv.addEventListener("pointerdown", e => {
+      drag = { x: e.clientX, y: e.clientY, px: view.panX, py: view.panY };
+      cv.setPointerCapture(e.pointerId);
+      cv.classList.add("dragging");
+    });
+    cv.addEventListener("pointermove", e => {
+      if (!drag) return;
+      view.panX = drag.px + (e.clientX - drag.x);
+      view.panY = drag.py + (e.clientY - drag.y);
+      onChange();
+    });
+    const end = () => { drag = null; cv.classList.remove("dragging"); };
+    cv.addEventListener("pointerup", end);
+    cv.addEventListener("pointercancel", end);
+    cv.addEventListener("wheel", e => {
+      e.preventDefault();
+      const r = cv.getBoundingClientRect();
+      setZoom(view.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    return setZoom;
+  }
+
+  function arrowHead(g, x1, y1, x2, y2) {
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    const len = 6;
+    g.beginPath();
+    g.moveTo(x1, y1);
+    g.lineTo(x1 - len*Math.cos(ang - 0.4), y1 - len*Math.sin(ang - 0.4));
+    g.moveTo(x1, y1);
+    g.lineTo(x1 - len*Math.cos(ang + 0.4), y1 - len*Math.sin(ang + 0.4));
+    g.stroke();
+  }
+
+  function haloText(g, x, y, label, color, align) {
+    align = align || "left";
+    g.font = "11px Segoe UI";
+    g.textAlign = align;
+    const w = g.measureText(label).width;
+    let boxX = x;
+    if (align === "center") boxX = x - w/2;
+    else if (align === "right") boxX = x - w;
+    g.fillStyle = "rgba(255,255,255,0.88)";
+    g.fillRect(boxX - 3, y - 11, w + 6, 15);
+    g.fillStyle = color;
+    g.fillText(label, x, y);
+  }
+
+  function dimH(g, x0, x1, y, color, label) {
+    g.strokeStyle = color; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
+    for (const x of [x0, x1]) { g.beginPath(); g.moveTo(x, y-4); g.lineTo(x, y+4); g.stroke(); }
+    arrowHead(g, x0, y, x1, y); arrowHead(g, x1, y, x0, y);
+    haloText(g, (x0+x1)/2, y - 8, label, color, "center");
+  }
+
+  function dimV(g, x, yTop, yBot, color, label) {
+    g.strokeStyle = color; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x, yTop); g.lineTo(x, yBot); g.stroke();
+    for (const y of [yTop, yBot]) { g.beginPath(); g.moveTo(x-4, y); g.lineTo(x+4, y); g.stroke(); }
+    arrowHead(g, x, yTop, x, yBot); arrowHead(g, x, yBot, x, yTop);
+    haloText(g, x + 8, (yTop+yBot)/2 + 4, label, color, "left");
+  }
+
+  // ── Styles: black linework, colour only in the fills ──
+  const LINE = "#000000";
+  const STYLE = {
+    boundary:    { col: LINE, lw: 2 },
+    fill:        { col: LINE, lw: 1, fill: true, fillColor: FILL_DEFAULT },
+    baseline:    { col: LINE, lw: 1, dashLine: true },
+    dim_h_gap:   { col: LINE, lw: 1 },
+    dim_h_pitch: { col: LINE, lw: 1 },
+    dim_v_sp:    { col: LINE, lw: 1 },
+    bar:         { col: LINE, lw: 2 },
+    crosshair:   { col: LINE, lw: 1 },
+    grid:        { col: LINE, lw: 1, dashLine: true },
+    gridFill:    { col: FILL_DEFAULT, lw: 0.5, fill: true, fillColor: FILL_DEFAULT },
+    strip1:      { col: LINE, lw: 1 },
+    strip2:      { col: LINE, lw: 1 },
+    strip3:      { col: LINE, lw: 1 },
+    stripFill1:  { col: STRIP_COL[0], lw: 0.5, fill: true, fillColor: STRIP_COL[0] },
+    stripFill2:  { col: STRIP_COL[1], lw: 0.5, fill: true, fillColor: STRIP_COL[1] },
+    stripFill3:  { col: STRIP_COL[2], lw: 0.5, fill: true, fillColor: STRIP_COL[2] },
+    stripDim:    { col: LINE, lw: 1 },
+    stripLabel:  { col: LINE, lw: 1 },
+    textDots1:   { col: FILL_DEFAULT, lw: 0.5, fill: true, fillColor: FILL_DEFAULT },
+    textDots2:   { col: FILL_DEFAULT, lw: 0.5, fill: true, fillColor: FILL_DEFAULT },
+    textDots3:   { col: FILL_DEFAULT, lw: 0.5, fill: true, fillColor: FILL_DEFAULT },
+    textOutline: { col: LINE, lw: 1 },
+    letterRings: { col: LINE, lw: 1 },
+    letterFill:  { col: FILL_DEFAULT, lw: 0.5, fill: true, fillColor: FILL_DEFAULT },
+    letterGlyph: { col: LINE, lw: 1 },
+  };
+
+  // ── Fill point colour ──
+  let fillHex = FILL_DEFAULT;
+  const SOLID_FILL_GROUPS = ["gridFill", "stripFill1", "stripFill2", "stripFill3",
+                             "textDots1", "textDots2", "textDots3", "letterFill"];
+  function applyFillColor(hex) {
+    hex = hex.toLowerCase();
+    fillHex = hex;
+    STRIP_COL.fill(hex);
+    STYLE.fill.fillColor = hex;
+    for (const k of SOLID_FILL_GROUPS) { STYLE[k].col = hex; STYLE[k].fillColor = hex; }
+  }
+
+  const fillColorIn = document.getElementById("fill_color");
+  const fillHexIn = document.getElementById("fill_color_hex");
+  function setFillColor(hex) {
+    fillColorIn.value = hex; fillHexIn.value = hex;
+    applyFillColor(hex);
+    requestRender();
+  }
+  fillColorIn.addEventListener("input", () => setFillColor(fillColorIn.value));
+  fillHexIn.addEventListener("input", () => {
+    let v = fillHexIn.value.trim();
+    if (!v.startsWith("#")) v = "#" + v;
+    if (/^#[0-9a-f]{6}$/i.test(v)) { fillColorIn.value = v.toLowerCase(); applyFillColor(v); requestRender(); }
+  });
+  document.getElementById("btn_fill_reset").addEventListener("click", () => setFillColor(FILL_DEFAULT));
+  fillColorIn.value = fillHexIn.value = FILL_DEFAULT;
+  applyFillColor(FILL_DEFAULT);
+
+  let lastScene = null;
+
+  function fitScene(scene, w, h, pad) {
+    const b = computeBounds(scene.elems);
+    const marginX = Math.max((b.maxX - b.minX) * 0.03, scene.r * 2);
+    const marginY = Math.max((b.maxY - b.minY) * 0.03, scene.r * 2);
+    const minX = b.minX - marginX, maxX = b.maxX + marginX;
+    const minY = b.minY - marginY, maxY = b.maxY + marginY;
+    const sceneW = Math.max(maxX - minX, 1e-6);
+    const sceneH = Math.max(maxY - minY, 1e-6);
+    const scale = Math.min((w - pad*2) / sceneW, (h - pad*2) / sceneH);
+    const contentW = sceneW * scale, contentH = sceneH * scale;
+    const offX = (w - contentW) / 2, offY = (h - contentH) / 2;
+    const cx = offX - minX * scale, cy = offY + maxY * scale;
+    return { scale, minX, maxX, minY, maxY, px: (x, y) => [cx + x*scale, cy - y*scale] };
+  }
+
+  // Draws a scene into a context; circles are batched per group into one path.
+  function drawSceneShapes(g, scene, w, h, pad) {
+    const { scale, px } = fitScene(scene, w, h, pad);
+    for (const group in scene.elems) {
+      const st = STYLE[group], items = scene.elems[group];
+      const stroke = !outlineHidden(group);
+      const fillCol = st.fill ? st.fillColor : null;
+      g.lineWidth = st.lw; g.strokeStyle = st.col;
+      g.setLineDash(st.dashLine ? [4,3] : []);
+      if (fillCol && stroke && st.col !== fillCol) {
+        g.fillStyle = fillCol;
+        for (const it of items) {
+          if (it.t !== "circle") continue;
+          const [cxp, cyp] = px(it.x, it.y);
+          g.beginPath(); g.arc(cxp, cyp, it.r * scale, 0, Math.PI*2);
+          g.fill(); g.stroke();
+        }
+      } else if (fillCol || stroke) {
+        g.beginPath();
+        for (const it of items) {
+          if (it.t !== "circle") continue;
+          const [cxp, cyp] = px(it.x, it.y), rp = it.r * scale;
+          g.moveTo(cxp + rp, cyp); g.arc(cxp, cyp, rp, 0, Math.PI*2);
+        }
+        if (fillCol) { g.fillStyle = fillCol; g.fill(); }
+        if (stroke) g.stroke();
+      }
+      g.setLineDash([]);
+      for (const it of items) {
+        if (it.t === "circle") continue;
+        g.strokeStyle = st.col; g.fillStyle = st.col; g.lineWidth = st.lw;
+        if (it.t === "line") {
+          const [x0,y0] = px(it.x0, it.y0), [x1,y1] = px(it.x1, it.y1);
+          g.beginPath();
+          if (st.dashLine) g.setLineDash([5,3]); else g.setLineDash([]);
+          g.moveTo(x0,y0); g.lineTo(x1,y1); g.stroke();
+          g.setLineDash([]);
+        } else if (it.t === "line_dash") {
+          const [x0,y0] = px(it.x0, it.y0), [x1,y1] = px(it.x1, it.y1);
+          g.beginPath(); g.setLineDash([3,3]);
+          g.moveTo(x0,y0); g.lineTo(x1,y1); g.stroke();
+          g.setLineDash([]);
+        } else if (it.t === "dim_h") {
+          const [x0,y0] = px(it.x0, it.y), [x1] = px(it.x1, it.y);
+          dimH(g, x0, x1, y0, st.col, it.label);
+        } else if (it.t === "dim_v") {
+          const [xp,y0] = px(it.x, it.y0), [,y1] = px(it.x, it.y1);
+          dimV(g, xp, y1, y0, st.col, it.label);
+        } else if (it.t === "text_r" || it.t === "text") {
+          const [xp,yp] = px(it.x, it.y);
+          haloText(g, xp, yp, it.label, st.col, "left");
+        }
+      }
+    }
+  }
+
+  function buildLegendDefs(p, g, scene, keys) {
+    const want = k => keys ? keys.includes(k) : winOpen[k];
+    const count = scene.elems.fill.length;
+    const fillVal = scene.tooDense
+      ? "too dense — widen spacing"
+      : `⌀ ${p.small_d.toFixed(2)} mm · ${count} pcs`;
+    const defs = [
+      { win:"single", col: LINE,  label: "Boundary circle",     val: `⌀ ${p.big_d.toFixed(2)} mm` },
+      { win:"single", col: fillHex, label: "Fill circles",        val: fillVal },
+      { win:"single", col: LINE, label: "H pitch dimension",   val: `${g.pitch.toFixed(2)} mm` },
+      { win:"single", col: LINE,    label: "H edge gap dimension",val: `${p.h_gap.toFixed(2)} mm` },
+      { win:"single", col: LINE,   label: "V spacing dimension", val: `${g.v_sp.toFixed(2)} mm` },
+      { win:"single", col: LINE, label: "Baseline row",        val: "reference" },
+      { win:"single", col: LINE,   label: "Stagger angle bar",   val: `${(g.a_rad*180/Math.PI).toFixed(1)}°` },
+      { win:"grid", col: "#000000",  label: "5×3 grid (boundary)", val: `⌀ ${scene.strip.d.map(v => v.toFixed(0)).join(" / ")} mm · pitch ${scene.strip.pitch.toFixed(0)} mm` },
+      { win:"grid", col: fillHex, label: "5×3 grid (infill)",   val: scene.strip.fillDense.some(Boolean) ? "too dense — widen spacing"
+          : `⌀ ${p.small_d.toFixed(2)} mm · ${scene.strip.fillPer.join(" / ")} each` + (scene.gridTooDense ? " · too many to draw" : "") },
+    ];
+    const st = scene.strip;
+    if (st && st.on) {
+      if (st.tooDense) {
+        defs.push({ win:"strip", col: COL.RED, label: "Gradient strip", val: "too many dots — reduce cols/rows" });
+      } else {
+        for (let s = 0; s < 3; s++) {
+          const fillTxt = st.fillDense[s] ? "fill too dense" : `${st.fillPer[s]} fill each`;
+          defs.push({ win:"strip", col: STRIP_COL[s], label: `Strip segment ${s + 1} (${p.strip.pct[s]}%)`,
+                      val: `⌀ ${st.d[s].toFixed(2)} mm · ${st.counts[s]} pcs · ${fillTxt}` });
+        }
+        defs.push({ win:"strip", col: LINE, label: "Strip pitch (all segments)",
+                    val: `${st.pitch.toFixed(2)} mm · ${st.total} pcs · ${st.fillTotal} fill dots` });
+      }
+    }
+    if (want("text")) {
+      const tm = getTextModel();
+      if (tm.tooMany) {
+        defs.push({ win:"text", col: COL.RED, label: "Text points", val: "too many — reduce the height" });
+      } else if (!tm.empty) {
+        for (let s = 0; s < 3; s++) {
+          defs.push({ win:"text", col: fillHex, label: `Text points ${tm.pct[s]}%`,
+                      val: `⌀ ${(tm.dMax * tm.pct[s] / 100).toFixed(2)} mm · ${tm.counts[s]} pcs` });
+        }
+        defs.push({ win:"text", col: LINE, label: `Text "${tm.txt.trim()}" (cap ${tm.capH.toFixed(0)} mm)`,
+                    val: `pitch ${tm.pitch.toFixed(2)} mm · ${tm.total} pcs` });
+      }
+    }
+    if (want("letter")) {
+      const L = getLetterData();
+      if (L.ok) {
+        defs.push({ win:"letter", col: fillHex, label: `Letter "${L.ch}" points`,
+                    val: `${L.counts.join(" / ")} · ${L.total} pcs` });
+        defs.push({ win:"letter", col: fillHex, label: `Letter "${L.ch}" fill circles`,
+                    val: `⌀ ${p.small_d.toFixed(2)} mm · ${L.fillPer.join(" / ")} each · ${L.fillTotal} pcs` });
+      }
+    }
+    return defs.filter(d => want(d.win));
+  }
+
+  function stripCalc(scene) {
+    const st = scene.strip;
+    if (st.tooDense) return { d: ["--", "--", "--"], total: "too many dots" };
+    return { d: st.d.map(v => v.toFixed(2) + " mm"), total: `${st.total} · ${st.fillTotal}` };
+  }
+
+  function updateCalcPanel(p, scene) {
+    const count = scene.elems.fill.length;
+    const g = geometry(p);
+    document.getElementById("c_pitch").textContent = g.pitch.toFixed(2) + " mm";
+    document.getElementById("c_hgap").textContent  = p.h_gap.toFixed(2) + " mm";
+    document.getElementById("c_vsp").textContent   = g.v_sp.toFixed(2) + " mm";
+    document.getElementById("c_vgap").textContent  = (g.v_sp - p.small_d).toFixed(2) + " mm";
+    document.getElementById("c_stag").textContent  = (g.a_rad*180/Math.PI).toFixed(1) + " deg";
+    const countEl = document.getElementById("c_count");
+    countEl.textContent = scene.tooDense ? "too dense — widen spacing" : String(count);
+    countEl.style.color = scene.tooDense ? COL.RED : COL.TEXT;
+
+    for (const el of document.querySelectorAll(".strip-calc")) el.style.display = scene.strip.on ? "" : "none";
+    if (scene.strip.on) {
+      const sc = stripCalc(scene);
+      for (let s = 0; s < 3; s++) {
+        const el = document.getElementById("c_strip_d" + (s + 1));
+        el.textContent = sc.d[s];
+        el.style.color = STRIP_COL[s];
+      }
+      const tEl = document.getElementById("c_strip_count");
+      tEl.textContent = sc.total;
+      tEl.style.color = scene.strip.tooDense ? COL.RED : COL.TEXT;
+      document.querySelector("#c_strip_d2").previousElementSibling.textContent = `Strip ⌀ seg 2 (${p.strip.pct[1]}%):`;
+      document.querySelector("#c_strip_d3").previousElementSibling.textContent = `Strip ⌀ seg 3 (${p.strip.pct[2]}%):`;
+    }
+
+    const legend = document.getElementById("legend");
+    legend.innerHTML = "";
+    for (const d of buildLegendDefs(p, g, scene)) {
+      const row = document.createElement("div");
+      row.className = "legend-row";
+      row.innerHTML = `<span class="legend-dot" style="color:${d.col}"></span>
+                        <span class="legend-txt">${d.label}</span>
+                        <span class="legend-val" style="color:${d.col}">${d.val}</span>`;
+      legend.appendChild(row);
+    }
+  }
+
+  // ── Export selection ──
+  const exportPick = { single:true, grid:true, strip:true, text:true, letter:true };
+  for (const b of document.querySelectorAll(".win-opt[data-export]")) {
+    b.addEventListener("click", () => {
+      const k = b.dataset.export;
+      exportPick[k] = !exportPick[k];
+      b.classList.toggle("on", exportPick[k]);
+    });
+  }
+  function exportKeys() { return WINDOWS.map(wd => wd.key).filter(k => exportPick[k]); }
+
+  function exportScene() {
+    const p = clampedParams();
+    const pE = Object.assign({}, p, { strip: Object.assign({}, p.strip, { on: true }) });
+    return { p: pE, scene: buildScene(pE) };
+  }
+
+  // ── Export: PNG (one file per window) ──
+  function renderWindowPNG(wd, p, scene) {
+    const g = geometry(p);
+    const legendDefs = buildLegendDefs(p, g, scene, [wd.key]);
+
+    const DPR = 2;
+    const panelW = 380, diagW = 1180, H = 1000, W = panelW + diagW;
+    const oc = document.createElement("canvas");
+    oc.width = W * DPR; oc.height = H * DPR;
+    const octx = oc.getContext("2d");
+    octx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    octx.fillStyle = "#ffffff";
+    octx.fillRect(0, 0, W, H);
+
+    const PAD = 16, HEAD = 32;
+    const rc = { w: diagW - PAD * 2, h: H - PAD * 2 };
+    const x = panelW + PAD, y0 = PAD;
+    octx.save();
+    octx.beginPath(); octx.roundRect(x, y0, rc.w, rc.h, 12); octx.clip();
+    octx.fillStyle = "#f8f9fb"; octx.fillRect(x, y0, rc.w, HEAD);
+    octx.fillStyle = COL.MUTED; octx.font = "bold 10px Segoe UI"; octx.textAlign = "left";
+    octx.fillText(wd.title.toUpperCase(), x + 12, y0 + 20);
+    octx.translate(x, y0 + HEAD);
+    if (wd.draw) wd.draw(octx, rc.w, rc.h - HEAD);
+    else drawWindowContent(octx, subScene(scene, wd.groups), rc.w, rc.h - HEAD, 24);
+    octx.restore();
+    octx.strokeStyle = "#e2e5ec"; octx.lineWidth = 1;
+    octx.beginPath(); octx.moveTo(x, y0 + HEAD + 0.5); octx.lineTo(x + rc.w, y0 + HEAD + 0.5); octx.stroke();
+    octx.beginPath(); octx.roundRect(x + 0.5, y0 + 0.5, rc.w - 1, rc.h - 1, 12); octx.stroke();
+
+    octx.fillStyle = "#f8f9fb";
+    octx.fillRect(0, 0, panelW, H);
+    octx.strokeStyle = "#e2e5ec"; octx.lineWidth = 1;
+    octx.beginPath(); octx.moveTo(panelW+0.5, 0); octx.lineTo(panelW+0.5, H); octx.stroke();
+
+    let y = 36;
+    octx.textAlign = "left";
+    octx.fillStyle = COL.TEXT; octx.font = "bold 16px Segoe UI";
+    octx.fillText("DÜSSELDORF RRX POINT GENERATOR", 22, y);
+    y += 16;
+    octx.fillStyle = COL.MUTED; octx.font = "11px Segoe UI";
+    octx.fillText("V1.0 · " + wd.title, 22, y);
+    y += 32;
+
+    function section(t) {
+      octx.fillStyle = COL.MUTED; octx.font = "bold 11px Segoe UI"; octx.textAlign = "left";
+      octx.fillText(t.toUpperCase(), 22, y);
+      y += 20;
+    }
+    function kv(label, val, color) {
+      octx.fillStyle = COL.MUTED; octx.font = "12px Segoe UI"; octx.textAlign = "left";
+      octx.fillText(label, 22, y);
+      octx.fillStyle = color || COL.TEXT; octx.font = "bold 12px Segoe UI"; octx.textAlign = "right";
+      octx.fillText(val, panelW - 22, y);
+      y += 21;
+    }
+
+    section("Parameters");
+    kv("Boundary diameter", p.big_d.toFixed(2) + " mm");
+    kv("Fill circle diameter", p.small_d.toFixed(2) + " mm");
+    kv("Horizontal edge gap", p.h_gap.toFixed(2) + " mm");
+    kv("Vertical spacing c-to-c", p.v_sp.toFixed(2) + " mm");
+    kv("Stagger angle", p.angle.toFixed(1) + " deg");
+    y += 12;
+
+    section("Calculated");
+    kv("H pitch (c-to-c)", g.pitch.toFixed(2) + " mm", COL.PURPLE);
+    kv("H edge gap", p.h_gap.toFixed(2) + " mm", COL.RED);
+    kv("V spacing (c-to-c)", g.v_sp.toFixed(2) + " mm", COL.CYAN);
+    kv("V edge (neg=overlap)", (g.v_sp - p.small_d).toFixed(2) + " mm", COL.ORANGE);
+    kv("Row stagger", (g.a_rad*180/Math.PI).toFixed(1) + " deg", COL.PINK);
+    kv("Fill circles", scene.tooDense ? "too dense" : String(scene.elems.fill.length));
+    y += 12;
+
+    if (wd.key === "strip" && scene.strip.on) {
+      const sc = stripCalc(scene);
+      section("Gradient strip");
+      kv("Columns per segment", String(p.strip.cols));
+      kv("Rows", String(p.strip.rows));
+      for (let s = 0; s < 3; s++) kv(`Segment ${s + 1} ⌀ (${p.strip.pct[s]}%)`, sc.d[s], STRIP_COL[s]);
+      kv("Pitch (all segments)", scene.strip.pitch.toFixed(2) + " mm", COL.PURPLE);
+      kv("Circles · fill dots", sc.total, scene.strip.tooDense ? COL.RED : COL.TEXT);
+      y += 12;
+    }
+    if (wd.key === "text") {
+      const tm = getTextModel();
+      section("Text");
+      kv("Text", tm.empty ? "—" : `"${tm.txt.trim()}"`);
+      kv("Cap height", tm.capH.toFixed(0) + " mm");
+      kv("Text width", (tm.width / 1000).toFixed(2) + " m");
+      kv("Pitch", tm.pitch.toFixed(2) + " mm", COL.PURPLE);
+      kv("Points", tm.tooMany ? "too many" : String(tm.total));
+      y += 12;
+    }
+    if (wd.key === "letter") {
+      const L = getLetterData();
+      section("Letter");
+      kv("Letter", L.ok ? `"${L.ch}" (no. ${L.idx + 1})` : "—");
+      if (L.ok) {
+        kv("Cap height", L.tm.capH.toFixed(0) + " mm");
+        kv("Points 100 / s2 / s3 %", L.counts.join(" / "));
+        kv("Fill circles per point", L.fillPer.join(" / "));
+        kv("Fill circles total", String(L.fillTotal));
+      }
+      y += 12;
+    }
+
+    section("Legend");
+    for (const d of legendDefs) {
+      octx.beginPath(); octx.arc(27, y - 4, 5, 0, Math.PI*2);
+      octx.lineWidth = 2; octx.strokeStyle = d.col; octx.stroke();
+      octx.fillStyle = COL.TEXT; octx.font = "11px Segoe UI"; octx.textAlign = "left";
+      octx.fillText(d.label, 40, y);
+      octx.fillStyle = d.col; octx.font = "bold 11px Segoe UI"; octx.textAlign = "right";
+      octx.fillText(d.val, panelW - 22, y);
+      y += 20;
+    }
+
+    octx.fillStyle = COL.MUTED; octx.font = "9.5px Segoe UI"; octx.textAlign = "center";
+    octx.fillText("code by studiogruber", panelW / 2, H - 18);
+    return oc.toDataURL("image/png");
+  }
+
+  function exportPNG() {
+    flushRender();
+    const keys = exportKeys();
+    if (!keys.length) { alert("Select at least one window to export."); return; }
+    const { p, scene } = exportScene();
+    keys.forEach((k, i) => {
+      const wd = WINDOWS.find(w => w.key === k);
+      const url = renderWindowPNG(wd, p, scene);
+      setTimeout(() => {
+        const link = document.createElement("a");
+        link.download = `duesseldorf_rrx_${k}.png`;
+        link.href = url;
+        link.click();
+      }, i * 400);
+    });
+  }
+
+  // ── Export: print/PDF (one page per window, to scale) ──
+  const STANDARD_SCALES = [
+    [1,       "1:1"],   [0.5,     "1:2"],   [0.4,      "1:2.5"], [0.25,    "1:4"],
+    [0.2,     "1:5"],   [0.1,     "1:10"],  [1/15,     "1:15"],  [0.05,    "1:20"],
+    [0.04,    "1:25"],  [0.02,    "1:50"],  [1/75,     "1:75"],  [0.01,    "1:100"],
+    [1/150,   "1:150"], [0.005,   "1:200"], [0.004,    "1:250"], [0.002,   "1:500"],
+    [0.001,   "1:1000"],
+  ];
+  function pickScale(exact) {
+    for (const [s, label] of STANDARD_SCALES) if (s <= exact + 1e-9) return { scale: s, label };
+    return { scale: exact, label: `1:${(1/exact).toFixed(1)}` };
+  }
+  function labelForScale(s) {
+    for (const [sv, label] of STANDARD_SCALES) if (Math.abs(sv - s) < 1e-6) return label;
+    return s >= 1 ? `${s.toFixed(2)}:1` : `1:${(1/s).toFixed(2)}`;
+  }
+  const PRINT_LW = { boundary:0.35, fill:0.15, baseline:0.2, dim_h_gap:0.15, dim_h_pitch:0.15, dim_v_sp:0.15, bar:0.3, crosshair:0.1, grid:0.35, gridFill:0.15,
+                     strip1:0.25, strip2:0.25, strip3:0.25, stripFill1:0.1, stripFill2:0.1, stripFill3:0.1, stripDim:0.15, stripLabel:0.15,
+                     textDots1:0.05, textDots2:0.05, textDots3:0.05, textOutline:0.2,
+                     letterRings:0.2, letterFill:0.02, letterGlyph:0.25 };
+  const n2 = v => Number(v).toFixed(3);
+  const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+  function svgArrowHead(x1,y1,x2,y2,color) {
+    const ang = Math.atan2(y2-y1, x2-x1), len = 1.8;
+    const ax1 = x1-len*Math.cos(ang-0.4), ay1 = y1-len*Math.sin(ang-0.4);
+    const ax2 = x1-len*Math.cos(ang+0.4), ay2 = y1-len*Math.sin(ang+0.4);
+    return `<path d="M${n2(x1)},${n2(y1)} L${n2(ax1)},${n2(ay1)} M${n2(x1)},${n2(y1)} L${n2(ax2)},${n2(ay2)}" stroke="${color}" stroke-width="0.25" fill="none"/>`;
+  }
+  function svgDimH(x0,x1,y,color,label) {
+    let s = `<line x1="${n2(x0)}" y1="${n2(y)}" x2="${n2(x1)}" y2="${n2(y)}" stroke="${color}" stroke-width="0.25"/>`;
+    s += `<line x1="${n2(x0)}" y1="${n2(y-1)}" x2="${n2(x0)}" y2="${n2(y+1)}" stroke="${color}" stroke-width="0.25"/>`;
+    s += `<line x1="${n2(x1)}" y1="${n2(y-1)}" x2="${n2(x1)}" y2="${n2(y+1)}" stroke="${color}" stroke-width="0.25"/>`;
+    s += svgArrowHead(x0,y,x1,y,color) + svgArrowHead(x1,y,x0,y,color);
+    s += `<text x="${n2((x0+x1)/2)}" y="${n2(y-1.2)}" font-size="2.4" text-anchor="middle" fill="${color}" font-family="Segoe UI, Arial, sans-serif">${esc(label)}</text>`;
+    return s;
+  }
+  function svgDimV(x,yTop,yBot,color,label) {
+    let s = `<line x1="${n2(x)}" y1="${n2(yTop)}" x2="${n2(x)}" y2="${n2(yBot)}" stroke="${color}" stroke-width="0.25"/>`;
+    s += `<line x1="${n2(x-1)}" y1="${n2(yTop)}" x2="${n2(x+1)}" y2="${n2(yTop)}" stroke="${color}" stroke-width="0.25"/>`;
+    s += `<line x1="${n2(x-1)}" y1="${n2(yBot)}" x2="${n2(x+1)}" y2="${n2(yBot)}" stroke="${color}" stroke-width="0.25"/>`;
+    s += svgArrowHead(x,yTop,x,yBot,color) + svgArrowHead(x,yBot,x,yTop,color);
+    s += `<text x="${n2(x+1.5)}" y="${n2((yTop+yBot)/2+0.9)}" font-size="2.4" fill="${color}" font-family="Segoe UI, Arial, sans-serif">${esc(label)}</text>`;
+    return s;
+  }
+
+  function textPrintScene() {
+    const tm = getTextModel();
+    const elems = { textDots1: [], textDots2: [], textDots3: [], textOutline: [] };
+    if (tm.empty || tm.tooMany) return { elems, r: 1, model: tm };
+    const groups = [elems.textDots1, elems.textDots2, elems.textDots3];
+    for (const d of tm.dots) {
+      if (!textSegOn[d.seg]) continue;
+      groups[d.seg].push({ t:"circle", x: d.x, y: -d.y, r: tm.dMax / 2 * tm.pct[d.seg] / 100 });
+    }
+    if (outlineOn.text) {
+      for (const c of tm.chars) {
+        if (!c.ch.trim()) continue;
+        elems.textOutline.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm,
+                                 bx0: c.left, by0: -tm.bottom, bx1: c.right, by1: -tm.top });
+      }
+    }
+    return { elems, r: tm.dMax / 2, model: tm };
+  }
+
+  function buildPrintSVG(scene, legendDefs, title, infoLine, pageW, pageH, scaleSel) {
+    const margin = 10;
+    const legendRowH = 5;
+    const footerH = 8 + legendDefs.length * legendRowH;
+    const diagTop = margin + 16, diagBottom = pageH - margin - footerH;
+    const diagLeft = margin, diagRight = pageW - margin;
+    const availW = diagRight - diagLeft, availH = diagBottom - diagTop;
+
+    const fit = fitScene(scene, availW, availH, 0);
+    const exact = fit.scale;
+    let scale, scaleLabel;
+    if (!scaleSel || scaleSel === "auto") {
+      ({ scale, label: scaleLabel } = pickScale(exact));
+    } else {
+      const requested = parseFloat(scaleSel);
+      if (requested <= exact + 1e-9) {
+        scale = requested;
+        scaleLabel = labelForScale(requested);
+      } else {
+        scale = exact;
+        scaleLabel = `${labelForScale(exact)} (${labelForScale(requested)} too large for this page)`;
+      }
+    }
+    const sceneW = fit.maxX - fit.minX, sceneH = fit.maxY - fit.minY;
+    const contentW = sceneW * scale, contentH = sceneH * scale;
+    const offX = diagLeft + (availW - contentW) / 2, offY = diagTop + (availH - contentH) / 2;
+    const cx = offX - fit.minX * scale, cy = offY + fit.maxY * scale;
+    const px = (x, y) => [cx + x*scale, cy - y*scale];
+
+    let shapes = "";
+    for (const group in scene.elems) {
+      const st = STYLE[group];
+      const lw = PRINT_LW[group];
+      for (const it of scene.elems[group]) {
+        if (it.t === "circle") {
+          const [cxp, cyp] = px(it.x, it.y);
+          const rp = it.r * scale;
+          const fillAttr = st.fill ? st.fillColor : "none";
+          const dashAttr = st.dashLine ? `stroke-dasharray="${lw*2.5},${lw*2}"` : "";
+          const noStroke = outlineHidden(group);
+          if (noStroke && fillAttr === "none") continue;
+          shapes += `<circle cx="${n2(cxp)}" cy="${n2(cyp)}" r="${n2(rp)}" stroke="${noStroke ? "none" : st.col}" stroke-width="${lw}" fill="${fillAttr}" ${noStroke ? "" : dashAttr}/>`;
+        } else if (it.t === "line" || it.t === "line_dash") {
+          const [x0,y0] = px(it.x0, it.y0), [x1,y1] = px(it.x1, it.y1);
+          const dash = it.t === "line_dash" ? `stroke-dasharray="1,1"` : (st.dashLine ? `stroke-dasharray="1.5,1"` : "");
+          shapes += `<line x1="${n2(x0)}" y1="${n2(y0)}" x2="${n2(x1)}" y2="${n2(y1)}" stroke="${st.col}" stroke-width="${lw}" ${dash}/>`;
+        } else if (it.t === "dim_h") {
+          const [x0,y0] = px(it.x0, it.y), [x1] = px(it.x1, it.y);
+          shapes += svgDimH(x0, x1, y0, st.col, it.label);
+        } else if (it.t === "dim_v") {
+          const [xp,y0] = px(it.x, it.y0), [,y1] = px(it.x, it.y1);
+          shapes += svgDimV(xp, y1, y0, st.col, it.label);
+        } else if (it.t === "text_r" || it.t === "text") {
+          const [xp,yp] = px(it.x, it.y);
+          shapes += `<text x="${n2(xp)}" y="${n2(yp)}" font-size="2.6" fill="${st.col}" font-family="Segoe UI, Arial, sans-serif">${esc(it.label)}</text>`;
+        } else if (it.t === "glyph") {
+          const [xp,yp] = px(it.x, it.y);
+          shapes += `<text x="${n2(xp)}" y="${n2(yp)}" font-size="${n2(it.size * scale)}" fill="none" stroke="${st.col}" stroke-width="${lw}" stroke-linejoin="round" font-family='${TEXT_FONT_FAMILY}'>${esc(it.ch)}</text>`;
+        }
+      }
+    }
+
+    let header = `<text x="${margin}" y="${margin+5}" font-size="5" font-weight="bold" fill="${COL.TEXT}" font-family="Segoe UI, Arial, sans-serif">DÜSSELDORF RRX POINT GENERATOR · ${esc(title)}</text>`;
+    header += `<text x="${margin}" y="${margin+10.5}" font-size="2.7" fill="${COL.MUTED}" font-family="Segoe UI, Arial, sans-serif">${esc(infoLine)}</text>`;
+    const scaleFontSize = scaleLabel.length > 12 ? 2.0 : 2.9;
+    header += `<text x="${pageW-margin}" y="${margin+10.5}" font-size="${scaleFontSize}" text-anchor="end" font-weight="bold" fill="${COL.TEXT}" font-family="Segoe UI, Arial, sans-serif">Scale ${scaleLabel}</text>`;
+
+    let footer = `<line x1="${margin}" y1="${diagBottom+2}" x2="${pageW-margin}" y2="${diagBottom+2}" stroke="#e5e8ef" stroke-width="0.2"/>`;
+    let fy = diagBottom + 7;
+    for (const d of legendDefs) {
+      footer += `<circle cx="${margin+1.4}" cy="${fy-1}" r="1.3" fill="none" stroke="${d.col}" stroke-width="0.5"/>`;
+      footer += `<text x="${margin+5}" y="${fy}" font-size="2.6" fill="${COL.TEXT}" font-family="Segoe UI, Arial, sans-serif">${esc(d.label)}</text>`;
+      footer += `<text x="${pageW-margin}" y="${fy}" font-size="2.6" text-anchor="end" font-weight="bold" fill="${d.col}" font-family="Segoe UI, Arial, sans-serif">${esc(d.val)}</text>`;
+      fy += legendRowH;
+    }
+    footer += `<text x="${pageW/2}" y="${pageH-4}" font-size="2.2" text-anchor="middle" fill="${COL.MUTED}" font-family="Segoe UI, Arial, sans-serif">code by studiogruber</text>`;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${pageW}mm" height="${pageH}mm" viewBox="0 0 ${pageW} ${pageH}">` +
+      `<rect x="0" y="0" width="${pageW}" height="${pageH}" fill="#ffffff"/>` +
+      header + shapes + footer + `</svg>`;
+  }
+
+  function buildPrintPages(pageW, pageH, scaleSel) {
+    const { p, scene } = exportScene();
+    const g = geometry(p);
+    const paramLine = `Boundary ⌀ ${p.big_d.toFixed(1)} mm · Fill ⌀ ${p.small_d.toFixed(1)} mm · ` +
+      `H gap ${p.h_gap.toFixed(2)} mm · V spacing ${p.v_sp.toFixed(2)} mm · Angle ${p.angle.toFixed(1)}° · Pitch ${g.pitch.toFixed(2)} mm`;
+    const pages = [], skipped = [];
+    for (const k of exportKeys()) {
+      const wd = WINDOWS.find(w => w.key === k);
+      let pageScene, infoLine = paramLine;
+      if (k === "text") {
+        const ts = textPrintScene();
+        pageScene = ts;
+        const tm = ts.model;
+        if (!tm.empty && !tm.tooMany) {
+          infoLine = `Text "${tm.txt.trim()}" · cap height ${tm.capH.toFixed(0)} mm · width ${(tm.width / 1000).toFixed(2)} m · ` +
+            `pitch ${tm.pitch.toFixed(2)} mm · ⌀ ${tm.pct.map(v => (tm.dMax * v / 100).toFixed(0)).join(" / ")} mm`;
+        }
+      } else if (k === "letter") {
+        const L = getLetterData();
+        pageScene = { elems: L.elems, r: L.r };
+        if (L.ok) {
+          infoLine = `Letter "${L.ch}" (no. ${L.idx + 1} of "${L.tm.txt.trim()}") · cap height ${L.tm.capH.toFixed(0)} mm · ` +
+            `${L.total} points · ${L.fillTotal} fill circles ⌀ ${p.small_d.toFixed(1)} mm · angle ${p.angle.toFixed(1)}°`;
+        }
+      } else {
+        pageScene = subScene(scene, wd.groups);
+      }
+      if (!hasShapes(pageScene)) { skipped.push(wd.title); continue; }
+      pages.push(buildPrintSVG(pageScene, buildLegendDefs(p, g, scene, [k]), wd.title, infoLine,
+                               pageW, pageH, scaleSel));
+    }
+    return { pages, skipped };
+  }
+
+  function exportPDF() {
+    flushRender();
+    const paper = document.getElementById("paper_size").value;
+    const pageW = paper === "A3" ? 297 : 210;
+    const pageH = paper === "A3" ? 420 : 297;
+    const scaleSel = document.getElementById("print_scale").value;
+    if (!exportKeys().length) { alert("Select at least one window to export."); return; }
+    const { pages, skipped } = buildPrintPages(pageW, pageH, scaleSel);
+    if (!pages.length) { alert("Nothing to print: the selected windows have no content."); return; }
+    if (skipped.length) alert(`Skipped (nothing to draw): ${skipped.join(", ")}`);
+    document.getElementById("printArea").innerHTML = pages.join("");
+    // named sizes (A4/A3) are picked up most reliably by the print dialog
+    document.getElementById("pageStyle").textContent = `@page { size: ${paper}; margin: 0; }`;
+    window.print();
+  }
+
+  // ── Rendering: redraws coalesced per frame, scene cached ──
+  let renderQueued = false, textQueued = false;
+  let sceneCache = null;
+  function nextFrame(fn) {
+    requestAnimationFrame(fn);
+    setTimeout(fn, 100);
+  }
+  function requestRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    nextFrame(() => { if (renderQueued) render(); });
+  }
+  function requestTextRefresh() {
+    if (renderQueued || textQueued) return;
+    textQueued = true;
+    nextFrame(() => { if (textQueued) refreshTextViews(); });
+  }
+  function refreshTextViews() {
+    textQueued = false;
+    redrawTextWindow();
+    redrawWindow("letter");
+    if (lastScene) updateCalcPanel(lastScene.p, lastScene.scene);
+  }
+  function flushRender() {
+    if (renderQueued) render();
+    else if (textQueued) refreshTextViews();
+  }
+
+  function render() {
+    renderQueued = false; textQueued = false;
+    const p = clampedParams();
+    const key = JSON.stringify(p);
+    if (!sceneCache || sceneCache.key !== key) sceneCache = { key, scene: buildScene(p) };
+    const scene = sceneCache.scene;
+    lastScene = { scene, p };
+
+    const W = stage.clientWidth, H = stage.clientHeight;
+    const rects = layoutRects(openKeys(), W, H, 12);
+    const dpr = window.devicePixelRatio || 1;
+    for (const wd of WINDOWS) {
+      const el = document.getElementById("win_" + wd.key);
+      const rc = rects[wd.key];
+      if (!rc) { el.style.display = "none"; continue; }
+      el.style.display = "";
+      el.style.left = rc.x + "px"; el.style.top = rc.y + "px";
+      el.style.width = rc.w + "px"; el.style.height = rc.h + "px";
+      const cv = el.querySelector("canvas");
+      const w = cv.clientWidth, h = cv.clientHeight;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      const g = cv.getContext("2d");
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (wd.draw) wd.draw(g, w, h);
+      else drawWindowContent(g, subScene(scene, wd.groups), w, h, 24);
+    }
+    document.getElementById("stageEmpty").style.display = Object.keys(rects).length ? "none" : "flex";
+
+    updateCalcPanel(p, scene);
+    updateTextBar();
+  }
+
+  window.addEventListener("resize", requestRender);
+  render();
+})();
+</script>
+</body>
+</html>
