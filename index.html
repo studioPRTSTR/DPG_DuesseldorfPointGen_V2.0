@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <title>Düsseldorf RRX Point Generator</title>
+<style>
+  /* Text fonts from the local Fonts folder */
+  @font-face{ font-family:"DPG Montserrat"; src:url("Fonts/Montserrat-Medium.ttf") format("truetype"); font-weight:normal; font-style:normal; }
+  @font-face{ font-family:"DPG Poppins";    src:url("Fonts/Poppins-Medium.ttf") format("truetype");    font-weight:normal; font-style:normal; }
+  @font-face{ font-family:"DPG Space Mono"; src:url("Fonts/SpaceMono-Regular.ttf") format("truetype"); font-weight:normal; font-style:normal; }
+</style>
 <style id="pageStyle">@page { size: A4; margin: 0; }</style>
 <style>
   :root{
@@ -195,7 +201,7 @@
 
     <div class="section">Windows</div>
     <button class="tool win-toggle" data-key="single"><span>Single point</span><span class="state"></span></button>
-    <button class="tool win-toggle" data-key="grid"><span>5×3 grid</span><span class="state"></span></button>
+    <button class="tool win-toggle" data-key="grid"><span>Gradient principle</span><span class="state"></span></button>
     <button class="tool win-toggle" data-key="strip"><span>Gradient strip</span><span class="state"></span></button>
     <button class="tool win-toggle" data-key="text"><span>Text</span><span class="state"></span></button>
     <button class="tool win-toggle" data-key="letter"><span>Letter</span><span class="state"></span></button>
@@ -295,7 +301,7 @@
       <label>Export windows</label>
       <div class="export-pick">
         <button class="win-opt on" data-export="single">Single point</button>
-        <button class="win-opt on" data-export="grid">5×3 grid</button>
+        <button class="win-opt on" data-export="grid">Gradient principle</button>
         <button class="win-opt on" data-export="strip">Gradient strip</button>
         <button class="win-opt on" data-export="text">Text</button>
         <button class="win-opt on" data-export="letter">Letter</button>
@@ -338,7 +344,7 @@
       <canvas></canvas>
     </div>
     <div class="win" id="win_grid">
-      <div class="win-head"><span>5×3 grid</span><div class="win-actions"><button class="win-opt" data-outline="grid" title="Show outlines">Outline</button><button class="win-close" data-key="grid" title="Close window">×</button></div></div>
+      <div class="win-head"><span>Gradient principle</span><div class="win-actions"><button class="win-opt" data-outline="grid" title="Show outlines">Outline</button><button class="win-close" data-key="grid" title="Close window">×</button></div></div>
       <canvas></canvas>
     </div>
     <div class="win" id="win_strip">
@@ -348,11 +354,18 @@
     <div class="win" id="win_text">
       <div class="win-head"><span>Text</span><div class="win-actions"><button class="win-opt" data-outline="text" title="Show outlines">Outline</button><button class="win-close" data-key="text" title="Close window">×</button></div></div>
       <div class="win-bar">
-        <input type="text" id="text_input" maxlength="15" placeholder="Type up to 15 characters…" spellcheck="false" autocomplete="off">
+        <input type="text" id="text_input" maxlength="15" value="SCHEMA" placeholder="Type up to 15 characters…" spellcheck="false" autocomplete="off">
         <span class="count" id="text_count">0/15</span>
         <label class="count" for="text_height" title="Cap height of the letters in real size">Height</label>
         <input type="number" id="text_height" class="num" min="100" max="20000" step="10" value="2000">
         <span class="count">mm</span>
+        <label class="count" for="text_font">Font</label>
+        <select id="text_font" class="letter-pick">
+          <option value="arial">Arial</option>
+          <option value="montserrat">Montserrat Medium</option>
+          <option value="poppins">Poppins Medium</option>
+          <option value="spacemono">Space Mono</option>
+        </select>
       </div>
       <div class="win-bar">
         <span class="count">Zoom</span>
@@ -427,7 +440,7 @@
   // ── Windows: each draws its scene groups or its own draw function ──
   const WINDOWS = [
     { key:"single", title:"Single point",   groups:["boundary","fill","baseline","dim_h_pitch","dim_h_gap","dim_v_sp","bar","crosshair"] },
-    { key:"grid",   title:"5×3 grid",       groups:["grid","gridFill"] },
+    { key:"grid",   title:"Gradient principle", groups:["grid","gridFill","gridDim"] },
     { key:"strip",  title:"Gradient strip", groups:["strip1","strip2","strip3","stripFill1","stripFill2","stripFill3","stripDim","stripLabel"] },
     { key:"text",   title:"Text",           groups:[], draw: (g, w, h) => drawTextWindow(g, w, h) },
     { key:"letter", title:"Letter",         groups:[], draw: (g, w, h) => drawLetterWindow(g, w, h) },
@@ -543,7 +556,7 @@
     const a_deg = a_rad * 180 / Math.PI;
     const small_d = p.small_d, h_gap = p.h_gap;
 
-    const elems = { boundary:[], fill:[], baseline:[], dim_h_pitch:[], dim_h_gap:[], dim_v_sp:[], bar:[], crosshair:[], grid:[], gridFill:[],
+    const elems = { boundary:[], fill:[], baseline:[], dim_h_pitch:[], dim_h_gap:[], dim_v_sp:[], bar:[], crosshair:[], grid:[], gridFill:[], gridDim:[],
                     strip1:[], strip2:[], strip3:[], stripFill1:[], stripFill2:[], stripFill3:[], stripDim:[], stripLabel:[] };
 
     elems.boundary.push({ t:"circle", x:0, y:0, r:R });
@@ -599,7 +612,7 @@
     const segPitch = p.big_d + h_gap;
     const gridGap = R * 0.8;
 
-    // 5×3 grid: one column per segment, same pitch.
+    // Gradient principle (5×3): one column per segment, same pitch.
     const preGridBounds = computeBounds(elems);
     const startY = preGridBounds.minY - gridGap - R;
     const gridTooDense = 5 * segPatterns.reduce((a, pt) => a + 1 + pt.length, 0) > MAX_DRAW;
@@ -611,6 +624,12 @@
         if (gridTooDense) continue;
         for (const f of segPatterns[gi]) elems.gridFill.push({ t:"circle", x: cx + f.x, y: cy + f.y, r: f.r });
       }
+      // Annotations: size in % above the column, diameter below it.
+      // Anchored at the circle edge, pushed out by offPx screen pixels so they never touch the dots.
+      const cx = (gi - 1) * segPitch;
+      elems.gridDim.push({ t:"text_c", x: cx, y: startY + R, offPx: -12, label: `${pct[gi]} %` });
+      elems.gridDim.push({ t:"dim_h", x0: cx - segR[gi], x1: cx + segR[gi], y: startY - 4 * segPitch - R, offPx: 30,
+                           label: `⌀ ${(segR[gi] * 2).toFixed(1)} mm` });
     }
 
     // Gradient strip: square grid of main circles right of the drawing.
@@ -680,7 +699,7 @@
         else if (it.t === "line" || it.t === "line_dash") { grow(it.x0, it.y0); grow(it.x1, it.y1); }
         else if (it.t === "dim_h") { grow(it.x0, it.y, 10); grow(it.x1, it.y, 10); }
         else if (it.t === "dim_v") { grow(it.x, it.y0, 10); grow(it.x, it.y1, 10); }
-        else if (it.t === "text_r" || it.t === "text") grow(it.x, it.y, 8);
+        else if (it.t === "text_r" || it.t === "text" || it.t === "text_c") grow(it.x, it.y, 8);
         else if (it.t === "glyph") { grow(it.bx0, it.by0); grow(it.bx1, it.by1); }
       }
     }
@@ -746,7 +765,15 @@
   }
 
   // ── Text window: real-size text (cap height in mm) filled with gradient points ──
-  const TEXT_FONT_FAMILY = "Arial, \"Helvetica Neue\", Helvetica, sans-serif";
+  // Text fonts: Arial (system) + the fonts in the Fonts folder (see @font-face in <head>).
+  const TEXT_FONTS = {
+    arial:   { name: "Arial",         css: "Arial, \"Helvetica Neue\", Helvetica, sans-serif" },
+    montserrat: { name: "Montserrat Medium", css: "\"DPG Montserrat\", Arial, sans-serif" },
+    poppins:    { name: "Poppins Medium",    css: "\"DPG Poppins\", Arial, sans-serif" },
+    spacemono:  { name: "Space Mono",        css: "\"DPG Space Mono\", Arial, sans-serif" },
+  };
+  const textFontIn = document.getElementById("text_font");
+  function textFont() { return TEXT_FONTS[textFontIn.value] || TEXT_FONTS.arial; }
   const TEXT_MAX_CELLS = 250000;
   const textInput = document.getElementById("text_input");
   const textCount = document.getElementById("text_count");
@@ -774,17 +801,18 @@
     const pitch = p.big_d + p.h_gap;
     const dMax = p.big_d;
     const pct = p.strip.pct;
-    const key = [txt, capH, pitch, dMax, pct.join("/")].join("|");
+    const font = textFont();
+    const key = [txt, capH, pitch, dMax, pct.join("/"), font.css].join("|");
     if (textModelCache && textModelCache.key === key) return textModelCache;
 
-    const model = { key, txt, capH, pitch, dMax, pct, dots: [], counts: [0, 0, 0], total: 0,
+    const model = { key, txt, capH, pitch, dMax, pct, fontName: font.name, fontCss: font.css, dots: [], counts: [0, 0, 0], total: 0,
                     chars: [], fontMm: 0, width: 0, top: 0, bottom: 0, tooMany: false, empty: !txt.trim() };
     textModelCache = model;
     if (model.empty) return model;
 
     const mc = textMaskCtx;
     const REF = 100;
-    mc.font = `${REF}px ${TEXT_FONT_FAMILY}`;
+    mc.font = `${REF}px ${font.css}`;
     const capRef = mc.measureText("H").actualBoundingBoxAscent || REF * 0.716;
     const fontMm = REF * capH / capRef;
     model.fontMm = fontMm;
@@ -806,7 +834,7 @@
     const s = 8 / pitch;
     const W = Math.max(1, Math.ceil(x * s) + 4), H = Math.max(1, Math.ceil((bottom - top) * s) + 4);
     textMask.width = W; textMask.height = H;
-    mc.font = `${(fontMm * s).toFixed(3)}px ${TEXT_FONT_FAMILY}`;
+    mc.font = `${(fontMm * s).toFixed(3)}px ${font.css}`;
     mc.textAlign = "left"; mc.textBaseline = "alphabetic"; mc.fillStyle = "#000";
     const ox = 2, oy = 2 - top * s;
     const gx0 = pitch / 2, gy0 = -capH + pitch / 2;
@@ -877,7 +905,7 @@
     }
 
     if (outlineOn.text) {
-      g.font = `${(model.fontMm * sc).toFixed(2)}px ${TEXT_FONT_FAMILY}`;
+      g.font = `${(model.fontMm * sc).toFixed(2)}px ${model.fontCss}`;
       g.textAlign = "left"; g.lineJoin = "round";
       g.strokeStyle = LINE; g.lineWidth = 1;
       for (const c of model.chars) if (c.ch.trim()) g.strokeText(c.ch, offX + c.x * sc, offY);
@@ -917,6 +945,17 @@
 
   textInput.addEventListener("input", requestTextRefresh);
   textHeightIn.addEventListener("input", requestTextRefresh);
+  // Web fonts load lazily: measure only once the font is ready, then drop the cached text model.
+  function loadTextFont() {
+    const css = textFont().css;
+    const ready = document.fonts ? document.fonts.load(`100px ${css}`, "H") : Promise.resolve();
+    ready.catch(() => {}).then(() => {
+      textModelCache = null; letterCache = null;
+      requestTextRefresh();
+    });
+  }
+  textFontIn.addEventListener("change", loadTextFont);
+  loadTextFont();  // the browser may restore a web font choice on reload
   textZoomIn.addEventListener("input", () => setTextZoom(parseFloat(textZoomIn.value)));
   document.getElementById("text_zoom_reset").addEventListener("click", () => setTextZoom(1));
   textSegBtns.forEach((b, i) => b.addEventListener("click", () => {
@@ -974,7 +1013,7 @@
       if (!tooMany) for (const f of sc.segFills[d.seg]) elems.letterFill.push({ t:"circle", x: cx + f.x, y: cy + f.y, r: f.r });
     }
     if (outlineOn.letter) {
-      elems.letterGlyph.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm,
+      elems.letterGlyph.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm, font: tm.fontCss,
                                bx0: c.left, by0: -tm.bottom, bx1: c.right, by1: -tm.top });
     }
     const R0 = sc.segR[0];
@@ -1024,7 +1063,7 @@
       g.lineWidth = 1; g.stroke();
       for (const gl of L.elems.letterGlyph) {
         const [x, y] = P(gl.x, gl.y);
-        g.font = `${(gl.size * sc).toFixed(2)}px ${TEXT_FONT_FAMILY}`;
+        g.font = `${(gl.size * sc).toFixed(2)}px ${gl.font}`;
         g.textAlign = "left"; g.textBaseline = "alphabetic"; g.lineJoin = "round";
         g.lineWidth = 1.5; g.strokeText(gl.ch, x, y);
       }
@@ -1158,6 +1197,7 @@
     crosshair:   { col: LINE, lw: 1 },
     grid:        { col: LINE, lw: 1, dashLine: true },
     gridFill:    { col: FILL_DEFAULT, lw: 0.5, fill: true, fillColor: FILL_DEFAULT },
+    gridDim:     { col: LINE, lw: 1 },
     strip1:      { col: LINE, lw: 1 },
     strip2:      { col: LINE, lw: 1 },
     strip3:      { col: LINE, lw: 1 },
@@ -1206,7 +1246,9 @@
 
   let lastScene = null;
 
-  function fitScene(scene, w, h, pad) {
+  // unit: output units per screen pixel, used for annotations offset by offPx (canvas 1, print in mm).
+  function fitScene(scene, w, h, pad, unit) {
+    unit = unit || 1;
     const b = computeBounds(scene.elems);
     const marginX = Math.max((b.maxX - b.minX) * 0.03, scene.r * 2);
     const marginY = Math.max((b.maxY - b.minY) * 0.03, scene.r * 2);
@@ -1214,11 +1256,18 @@
     const minY = b.minY - marginY, maxY = b.maxY + marginY;
     const sceneW = Math.max(maxX - minX, 1e-6);
     const sceneH = Math.max(maxY - minY, 1e-6);
-    const scale = Math.min((w - pad*2) / sceneW, (h - pad*2) / sceneH);
+    // Reserve room for screen-offset annotations above and below the drawing.
+    let padTop = pad, padBot = pad;
+    for (const group in scene.elems) for (const it of scene.elems[group]) {
+      if (!it.offPx) continue;
+      if (it.offPx < 0) padTop = Math.max(padTop, pad + (-it.offPx + 14) * unit);
+      else padBot = Math.max(padBot, pad + (it.offPx + 6) * unit);
+    }
+    const scale = Math.min((w - pad*2) / sceneW, (h - padTop - padBot) / sceneH);
     const contentW = sceneW * scale, contentH = sceneH * scale;
-    const offX = (w - contentW) / 2, offY = (h - contentH) / 2;
+    const offX = (w - contentW) / 2, offY = padTop + (h - padTop - padBot - contentH) / 2;
     const cx = offX - minX * scale, cy = offY + maxY * scale;
-    return { scale, minX, maxX, minY, maxY, px: (x, y) => [cx + x*scale, cy - y*scale] };
+    return { scale, minX, maxX, minY, maxY, padTop, padBot, px: (x, y) => [cx + x*scale, cy - y*scale] };
   }
 
   // Draws a scene into a context; circles are batched per group into one path.
@@ -1265,13 +1314,16 @@
           g.setLineDash([]);
         } else if (it.t === "dim_h") {
           const [x0,y0] = px(it.x0, it.y), [x1] = px(it.x1, it.y);
-          dimH(g, x0, x1, y0, st.col, it.label);
+          dimH(g, x0, x1, y0 + (it.offPx || 0), st.col, it.label);
         } else if (it.t === "dim_v") {
           const [xp,y0] = px(it.x, it.y0), [,y1] = px(it.x, it.y1);
           dimV(g, xp, y1, y0, st.col, it.label);
         } else if (it.t === "text_r" || it.t === "text") {
           const [xp,yp] = px(it.x, it.y);
           haloText(g, xp, yp, it.label, st.col, "left");
+        } else if (it.t === "text_c") {
+          const [xp,yp] = px(it.x, it.y);
+          haloText(g, xp, yp + (it.offPx || 0), it.label, st.col, "center");
         }
       }
     }
@@ -1291,8 +1343,8 @@
       { win:"single", col: LINE,   label: "V spacing dimension", val: `${g.v_sp.toFixed(2)} mm` },
       { win:"single", col: LINE, label: "Baseline row",        val: "reference" },
       { win:"single", col: LINE,   label: "Stagger angle bar",   val: `${(g.a_rad*180/Math.PI).toFixed(1)}°` },
-      { win:"grid", col: "#000000",  label: "5×3 grid (boundary)", val: `⌀ ${scene.strip.d.map(v => v.toFixed(0)).join(" / ")} mm · pitch ${scene.strip.pitch.toFixed(0)} mm` },
-      { win:"grid", col: fillHex, label: "5×3 grid (infill)",   val: scene.strip.fillDense.some(Boolean) ? "too dense — widen spacing"
+      { win:"grid", col: "#000000",  label: "Gradient principle (boundary)", val: `⌀ ${scene.strip.d.map(v => v.toFixed(0)).join(" / ")} mm · pitch ${scene.strip.pitch.toFixed(0)} mm` },
+      { win:"grid", col: fillHex, label: "Gradient principle (infill)",   val: scene.strip.fillDense.some(Boolean) ? "too dense — widen spacing"
           : `⌀ ${p.small_d.toFixed(2)} mm · ${scene.strip.fillPer.join(" / ")} each` + (scene.gridTooDense ? " · too many to draw" : "") },
     ];
     const st = scene.strip;
@@ -1484,6 +1536,7 @@
       const tm = getTextModel();
       section("Text");
       kv("Text", tm.empty ? "—" : `"${tm.txt.trim()}"`);
+      kv("Font", tm.fontName);
       kv("Cap height", tm.capH.toFixed(0) + " mm");
       kv("Text width", (tm.width / 1000).toFixed(2) + " m");
       kv("Pitch", tm.pitch.toFixed(2) + " mm", COL.PURPLE);
@@ -1552,7 +1605,7 @@
     for (const [sv, label] of STANDARD_SCALES) if (Math.abs(sv - s) < 1e-6) return label;
     return s >= 1 ? `${s.toFixed(2)}:1` : `1:${(1/s).toFixed(2)}`;
   }
-  const PRINT_LW = { boundary:0.35, fill:0.15, baseline:0.2, dim_h_gap:0.15, dim_h_pitch:0.15, dim_v_sp:0.15, bar:0.3, crosshair:0.1, grid:0.35, gridFill:0.15,
+  const PRINT_LW = { boundary:0.35, fill:0.15, baseline:0.2, dim_h_gap:0.15, dim_h_pitch:0.15, dim_v_sp:0.15, bar:0.3, crosshair:0.1, grid:0.35, gridFill:0.15, gridDim:0.15,
                      strip1:0.25, strip2:0.25, strip3:0.25, stripFill1:0.1, stripFill2:0.1, stripFill3:0.1, stripDim:0.15, stripLabel:0.15,
                      textDots1:0.05, textDots2:0.05, textDots3:0.05, textOutline:0.2,
                      letterRings:0.2, letterFill:0.02, letterGlyph:0.25 };
@@ -1594,7 +1647,7 @@
     if (outlineOn.text) {
       for (const c of tm.chars) {
         if (!c.ch.trim()) continue;
-        elems.textOutline.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm,
+        elems.textOutline.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm, font: tm.fontCss,
                                  bx0: c.left, by0: -tm.bottom, bx1: c.right, by1: -tm.top });
       }
     }
@@ -1609,7 +1662,8 @@
     const diagLeft = margin, diagRight = pageW - margin;
     const availW = diagRight - diagLeft, availH = diagBottom - diagTop;
 
-    const fit = fitScene(scene, availW, availH, 0);
+    const PRINT_PX = 0.24;  // mm on paper per screen pixel of annotation offset
+    const fit = fitScene(scene, availW, availH, 0, PRINT_PX);
     const exact = fit.scale;
     let scale, scaleLabel;
     if (!scaleSel || scaleSel === "auto") {
@@ -1626,7 +1680,8 @@
     }
     const sceneW = fit.maxX - fit.minX, sceneH = fit.maxY - fit.minY;
     const contentW = sceneW * scale, contentH = sceneH * scale;
-    const offX = diagLeft + (availW - contentW) / 2, offY = diagTop + (availH - contentH) / 2;
+    const offX = diagLeft + (availW - contentW) / 2;
+    const offY = diagTop + fit.padTop + (availH - fit.padTop - fit.padBot - contentH) / 2;
     const cx = offX - fit.minX * scale, cy = offY + fit.maxY * scale;
     const px = (x, y) => [cx + x*scale, cy - y*scale];
 
@@ -1649,16 +1704,19 @@
           shapes += `<line x1="${n2(x0)}" y1="${n2(y0)}" x2="${n2(x1)}" y2="${n2(y1)}" stroke="${st.col}" stroke-width="${lw}" ${dash}/>`;
         } else if (it.t === "dim_h") {
           const [x0,y0] = px(it.x0, it.y), [x1] = px(it.x1, it.y);
-          shapes += svgDimH(x0, x1, y0, st.col, it.label);
+          shapes += svgDimH(x0, x1, y0 + (it.offPx || 0) * PRINT_PX, st.col, it.label);
         } else if (it.t === "dim_v") {
           const [xp,y0] = px(it.x, it.y0), [,y1] = px(it.x, it.y1);
           shapes += svgDimV(xp, y1, y0, st.col, it.label);
         } else if (it.t === "text_r" || it.t === "text") {
           const [xp,yp] = px(it.x, it.y);
           shapes += `<text x="${n2(xp)}" y="${n2(yp)}" font-size="2.6" fill="${st.col}" font-family="Segoe UI, Arial, sans-serif">${esc(it.label)}</text>`;
+        } else if (it.t === "text_c") {
+          const [xp,yp] = px(it.x, it.y);
+          shapes += `<text x="${n2(xp)}" y="${n2(yp + (it.offPx || 0) * PRINT_PX)}" font-size="2.6" text-anchor="middle" fill="${st.col}" font-family="Segoe UI, Arial, sans-serif">${esc(it.label)}</text>`;
         } else if (it.t === "glyph") {
           const [xp,yp] = px(it.x, it.y);
-          shapes += `<text x="${n2(xp)}" y="${n2(yp)}" font-size="${n2(it.size * scale)}" fill="none" stroke="${st.col}" stroke-width="${lw}" stroke-linejoin="round" font-family='${TEXT_FONT_FAMILY}'>${esc(it.ch)}</text>`;
+          shapes += `<text x="${n2(xp)}" y="${n2(yp)}" font-size="${n2(it.size * scale)}" fill="none" stroke="${st.col}" stroke-width="${lw}" stroke-linejoin="round" font-family='${it.font}'>${esc(it.ch)}</text>`;
         }
       }
     }
@@ -1697,7 +1755,7 @@
         pageScene = ts;
         const tm = ts.model;
         if (!tm.empty && !tm.tooMany) {
-          infoLine = `Text "${tm.txt.trim()}" · cap height ${tm.capH.toFixed(0)} mm · width ${(tm.width / 1000).toFixed(2)} m · ` +
+          infoLine = `Text "${tm.txt.trim()}" · ${tm.fontName} · cap height ${tm.capH.toFixed(0)} mm · width ${(tm.width / 1000).toFixed(2)} m · ` +
             `pitch ${tm.pitch.toFixed(2)} mm · ⌀ ${tm.pct.map(v => (tm.dMax * v / 100).toFixed(0)).join(" / ")} mm`;
         }
       } else if (k === "letter") {
