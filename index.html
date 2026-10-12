@@ -514,7 +514,7 @@
       rows: clampInt(params.strip_rows, 1, 40, 8),
       pct:  [100, clampInt(params.strip_s2, 5, 100, 75), clampInt(params.strip_s3, 5, 100, 50)],
     };
-    return { big_d, small_d, h_gap, v_sp, angle, strip };
+    return { big_d, small_d, h_gap, v_sp, angle, strip, grid: winOpen.grid };
   }
 
   function geometry(p) {
@@ -645,7 +645,7 @@
         const cx = (gi - 1) * segPitch;
         const cy = startY - gj * segPitch;
         elems.grid.push({ t:"circle", x:cx, y:cy, r: segR[gi] });
-        if (gridTooDense) continue;
+        if (gridTooDense || !p.grid) continue;  // fills only while the window is open
         for (const f of segPatterns[gi]) elems.gridFill.push({ t:"circle", x: cx + f.x, y: cy + f.y, r: f.r });
       }
       // Annotations: size in % above the column, diameter below it.
@@ -707,6 +707,10 @@
              segFills: segPatterns, segR };
   }
 
+  // Fill circles always lie inside their boundary circle, so they never widen the bounds:
+  // skipping them avoids looping over tens of thousands of dots.
+  const BOUNDS_SKIP = new Set(["fill", "gridFill", "stripFill1", "stripFill2", "stripFill3", "letterFill"]);
+
   // Bounding box over all drawn primitives.
   function computeBounds(elems) {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -718,6 +722,7 @@
       if (y + pad > maxY) maxY = y + pad;
     }
     for (const group in elems) {
+      if (BOUNDS_SKIP.has(group)) continue;
       for (const it of elems[group]) {
         if (it.t === "circle") grow(it.x, it.y, it.r);
         else if (it.t === "line" || it.t === "line_dash") { grow(it.x0, it.y0); grow(it.x1, it.y1); }
@@ -865,7 +870,7 @@
     const ox = 2, oy = 2 - top * s;
     const gx0 = pitch / 2, gy0 = -capH + pitch / 2;
     const kStart = Math.floor((top - gy0) / pitch), kEnd = Math.ceil((bottom - gy0) / pitch);
-    const taken = new Set();
+    const taken = new Set(), kSpan = kEnd - kStart + 1;
     for (let ci = 0; ci < model.chars.length; ci++) {
       const c = model.chars[ci];
       if (!c.ch.trim()) continue;
@@ -885,7 +890,7 @@
           const ix = Math.round(ox + px * s) - bx0, iy = Math.round(oy + py * s);
           if (ix < 0 || ix >= bw || iy < 0 || iy >= H) continue;
           if (data[(iy * bw + ix) * 4 + 3] < 128) continue;
-          const id = j + "," + kk;
+          const id = j * kSpan + (kk - kStart);  // numeric key, cheaper than a string
           if (taken.has(id)) continue;
           taken.add(id);
           model.dots.push({ x: px, y: py, seg, ci });
@@ -1206,21 +1211,29 @@
   });
 
   // ── Shared window helpers ──
-  function redrawWindow(key) {
-    const el = document.getElementById("win_" + key);
-    if (!winOpen[key] || el.style.display === "none") return;
-    const wd = WINDOWS.find(w => w.key === key);
-    const cv = el.querySelector("canvas");
+  function paintWindow(wd, cv) {
     const dpr = window.devicePixelRatio || 1;
     const g = cv.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (wd.draw) wd.draw(g, cv.clientWidth, cv.clientHeight);
     else drawWindowContent(g, subScene(lastScene.scene, wd.groups), cv.clientWidth, cv.clientHeight, 24);
   }
+  function redrawWindow(key) {
+    const el = document.getElementById("win_" + key);
+    if (!winOpen[key] || el.style.display === "none") return;
+    paintWindow(WINDOWS.find(w => w.key === key), el.querySelector("canvas"));
+  }
 
   // Wheel zoom (at the cursor) + drag pan; returns setZoom(z, ax?, ay?).
-  function attachPanZoom(key, view, maxZoom, onChange) {
+  // Redraws are coalesced to one per frame: pointer and wheel events fire far more often.
+  function attachPanZoom(key, view, maxZoom, redraw) {
     const cv = document.querySelector(`#win_${key} canvas`);
+    let queued = false;
+    const onChange = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; redraw(); });
+    };
     function setZoom(z, ax, ay) {
       const cw = cv.clientWidth, ch = cv.clientHeight;
       z = Math.max(1, Math.min(maxZoom, z));
@@ -1394,15 +1407,7 @@
       const fillCol = st.fill ? st.fillColor : null;
       g.lineWidth = st.lw; g.strokeStyle = st.col;
       g.setLineDash(st.dashLine ? [4,3] : []);
-      if (fillCol && stroke && st.col !== fillCol) {
-        g.fillStyle = fillCol;
-        for (const it of items) {
-          if (it.t !== "circle") continue;
-          const [cxp, cyp] = px(it.x, it.y);
-          g.beginPath(); g.arc(cxp, cyp, it.r * scale, 0, Math.PI*2);
-          g.fill(); g.stroke();
-        }
-      } else if (fillCol || stroke) {
+      if (fillCol || stroke) {
         g.beginPath();
         for (const it of items) {
           if (it.t !== "circle") continue;
@@ -1561,7 +1566,7 @@
 
   function exportScene() {
     const p = clampedParams();
-    const pE = Object.assign({}, p, { strip: Object.assign({}, p.strip, { on: true }) });
+    const pE = Object.assign({}, p, { grid: true, strip: Object.assign({}, p.strip, { on: true }) });
     return { p: pE, scene: buildScene(pE) };
   }
 
@@ -1955,12 +1960,9 @@
       el.style.left = rc.x + "px"; el.style.top = rc.y + "px";
       el.style.width = rc.w + "px"; el.style.height = rc.h + "px";
       const cv = el.querySelector("canvas");
-      const w = cv.clientWidth, h = cv.clientHeight;
-      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-      const g = cv.getContext("2d");
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (wd.draw) wd.draw(g, w, h);
-      else drawWindowContent(g, subScene(scene, wd.groups), w, h, 24);
+      const cw = Math.round(cv.clientWidth * dpr), ch = Math.round(cv.clientHeight * dpr);
+      if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }  // resizing reallocates the bitmap
+      paintWindow(wd, cv);
     }
     document.getElementById("stageEmpty").style.display = Object.keys(rects).length ? "none" : "flex";
 
