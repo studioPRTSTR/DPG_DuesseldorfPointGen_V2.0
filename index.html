@@ -173,6 +173,10 @@
   #win_letter canvas.dragging{ cursor:grabbing; }
   #win_text canvas{ cursor:grab; }
   #win_text canvas.dragging{ cursor:grabbing; }
+  #win_colour canvas{ cursor:grab; }
+  #win_colour canvas.dragging{ cursor:grabbing; }
+  .combo-row{ display:flex; gap:6px; margin-top:6px; }
+  .combo-row select{ flex:1; min-width:0; }
   .win-bar .count{ font-size:11px; color:var(--muted); font-family:"Consolas","Courier New",monospace; }
   #stageEmpty{
     position:absolute; inset:0; display:none; align-items:center; justify-content:center;
@@ -205,6 +209,7 @@
     <button class="tool win-toggle" data-key="strip"><span>Gradient strip</span><span class="state"></span></button>
     <button class="tool win-toggle" data-key="text"><span>Text</span><span class="state"></span></button>
     <button class="tool win-toggle" data-key="letter"><span>Letter</span><span class="state"></span></button>
+    <button class="tool win-toggle" data-key="colour"><span>Colour preview</span><span class="state"></span></button>
 
     <div class="section">Parameters</div>
 
@@ -294,7 +299,23 @@
       <div class="ctrl-row">
         <input type="color" id="fill_color">
         <input type="text" id="fill_color_hex" maxlength="7" spellcheck="false">
-        <button class="tool mini" id="btn_fill_reset" title="Back to the default cyan">Reset</button>
+        <button class="tool mini" id="btn_fill_reset" title="Back to the default orange">Reset</button>
+      </div>
+    </div>
+    <div class="ctrl" style="margin-bottom:6px;">
+      <label>Background colour (colour preview)</label>
+      <div class="ctrl-row">
+        <input type="color" id="bg_color">
+        <input type="text" id="bg_color_hex" maxlength="7" spellcheck="false">
+        <button class="tool mini" id="btn_bg_reset" title="Back to the default background">Reset</button>
+      </div>
+    </div>
+    <div class="ctrl" style="margin-bottom:8px;">
+      <label>Colour combinations (fill + background)</label>
+      <select id="combo_pick"></select>
+      <div class="combo-row">
+        <button class="tool mini" id="btn_combo_save" title="Save the current fill and background colour as a combination">Save current</button>
+        <button class="tool mini" id="btn_combo_delete" title="Delete the selected combination">Delete</button>
       </div>
     </div>
     <div class="ctrl" style="margin-bottom:8px;">
@@ -305,6 +326,7 @@
         <button class="win-opt on" data-export="strip">Gradient strip</button>
         <button class="win-opt on" data-export="text">Text</button>
         <button class="win-opt on" data-export="letter">Letter</button>
+        <button class="win-opt on" data-export="colour">Colour preview</button>
       </div>
     </div>
     <button class="tool" id="btn_png">Export PNG (one file per window)</button>
@@ -397,6 +419,10 @@
       </div>
       <canvas></canvas>
     </div>
+    <div class="win" id="win_colour">
+      <div class="win-head"><span>Colour preview</span><div class="win-actions"><button class="win-opt" id="colour_fit" title="Fit the text to the window">Fit</button><button class="win-close" data-key="colour" title="Close window">×</button></div></div>
+      <canvas></canvas>
+    </div>
     <div id="stageEmpty">All windows are closed. Reopen them from the sidebar.</div>
   </div>
 
@@ -450,8 +476,9 @@
     { key:"strip",  title:"Gradient strip", groups:["strip1","strip2","strip3","stripFill1","stripFill2","stripFill3","stripDim","stripLabel"] },
     { key:"text",   title:"Text",           groups:[], draw: (g, w, h) => drawTextWindow(g, w, h) },
     { key:"letter", title:"Letter",         groups:[], draw: (g, w, h) => drawLetterWindow(g, w, h) },
+    { key:"colour", title:"Colour preview", groups:[], draw: (g, w, h) => drawColourWindow(g, w, h) },
   ];
-  const winOpen = { single:true, grid:true, strip:true, text:true, letter:true };
+  const winOpen = { single:true, grid:true, strip:true, text:true, letter:true, colour:true };
 
   function updateWinButtons() {
     for (const b of document.querySelectorAll(".win-toggle")) {
@@ -468,7 +495,7 @@
   updateWinButtons();
 
   // ── Outlines: off by default, toggled per window ──
-  const outlineOn = { single:false, grid:false, strip:false, text:false, letter:false };
+  const outlineOn = { single:false, grid:false, strip:false, text:false, letter:false, colour:false };
   const OUTLINE_GROUPS = {
     single: ["boundary", "fill"],
     grid:   ["grid"],
@@ -746,6 +773,7 @@
     const BANDS = [
       { wt: 2, cols: [{ keys: ["single"], wt: 1 }, { keys: ["grid", "strip"], wt: 1 }] },
       { wt: 1, cols: [{ keys: ["text"],   wt: 2 }, { keys: ["letter"],        wt: 1 }] },
+      { wt: 1, cols: [{ keys: ["colour"], wt: 1 }] },
     ];
     const bands = BANDS.map(b => ({ wt: b.wt, cols: b.cols.map(c => ({ wt: c.wt, keys: c.keys.filter(k => keys.includes(k)) }))
                                                         .filter(c => c.keys.length) }))
@@ -902,24 +930,26 @@
     return model;
   }
 
-  function drawTextWindow(g, w, h) {
-    g.fillStyle = COL.BG;
+  // Text dots on a background colour; shared by the text and the colour preview window.
+  // Returns the placement, or null when there is nothing to draw.
+  function drawTextDots(g, w, h, view, bg) {
+    g.fillStyle = bg;
     g.fillRect(0, 0, w, h);
     const model = getTextModel();
     g.textAlign = "center"; g.textBaseline = "middle";
-    g.font = "12px Segoe UI"; g.fillStyle = COL.MUTED;
+    g.font = "12px Segoe UI"; g.fillStyle = isDark(bg) ? "#d1d5db" : COL.MUTED;
     if (model.empty || model.tooMany) {
-      g.fillText(model.empty ? "Type in the bar above to preview the text"
+      g.fillText(model.empty ? "Type in the text window to preview the text"
         : "Too many points: reduce the height or enlarge the boundary diameter", w / 2, h / 2);
       g.textBaseline = "alphabetic";
-      return;
+      return null;
     }
     g.textBaseline = "alphabetic";
 
     const tw = model.width, th = model.bottom - model.top;
-    const sc = Math.min(w * 0.9 / Math.max(tw, 1e-6), h * 0.8 / Math.max(th, 1e-6)) * textView.zoom;
-    const offX = w / 2 - (tw / 2) * sc + textView.panX;
-    const offY = h / 2 - (model.top + th / 2) * sc + textView.panY;
+    const sc = Math.min(w * 0.9 / Math.max(tw, 1e-6), h * 0.8 / Math.max(th, 1e-6)) * view.zoom;
+    const offX = w / 2 - (tw / 2) * sc + view.panX;
+    const offY = h / 2 - (model.top + th / 2) * sc + view.panY;
 
     g.fillStyle = fillHex;
     for (let seg = 0; seg < 3; seg++) {
@@ -934,6 +964,13 @@
       }
       g.fill();
     }
+    return { model, sc, offX, offY };
+  }
+
+  function drawTextWindow(g, w, h) {
+    const t = drawTextDots(g, w, h, textView, COL.BG);
+    if (!t) return;
+    const { model, sc, offX, offY } = t;
 
     if (outlineOn.text) {
       g.font = `${(model.fontMm * sc).toFixed(2)}px ${model.fontCss}`;
@@ -974,6 +1011,24 @@
     redrawTextWindow();
   });
 
+  // ── Colour preview window: the text dots in the fill colour on the background colour ──
+  const BG_DEFAULT = "#2b2d31";
+  let bgHex = BG_DEFAULT;
+  const colourView = { zoom: 1, panX: 0, panY: 0 };
+  function isDark(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) < 140;
+  }
+  function drawColourWindow(g, w, h) {
+    if (!drawTextDots(g, w, h, colourView, bgHex)) return;
+    const label = `Fill ${fillHex.toUpperCase()} · Background ${bgHex.toUpperCase()}`;
+    g.font = "11px Segoe UI"; g.textAlign = "left";
+    g.fillStyle = isDark(bgHex) ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.6)";
+    g.fillText(label, 10, h - 10);
+  }
+  const setColourZoom = attachPanZoom("colour", colourView, 20, () => redrawWindow("colour"));
+  document.getElementById("colour_fit").addEventListener("click", () => setColourZoom(1));
+
   textInput.addEventListener("input", requestTextRefresh);
   textHeightIn.addEventListener("input", requestTextRefresh);
   // Web fonts load lazily: measure only once the font is ready, then drop the cached text model.
@@ -994,6 +1049,7 @@
     b.classList.toggle("on", textSegOn[i]);
     redrawTextWindow();
     redrawWindow("letter");
+    redrawWindow("colour");
   }));
 
   // ── Letter window: one letter with the real infill of every point ──
@@ -1372,6 +1428,63 @@
   fillColorIn.value = fillHexIn.value = FILL_DEFAULT;
   applyFillColor(FILL_DEFAULT);
 
+  // ── Background colour (colour preview) ──
+  const bgColorIn = document.getElementById("bg_color");
+  const bgHexIn = document.getElementById("bg_color_hex");
+  function setBgColor(hex) {
+    bgHex = hex.toLowerCase();
+    bgColorIn.value = bgHexIn.value = bgHex;
+    requestRender();
+  }
+  bgColorIn.addEventListener("input", () => setBgColor(bgColorIn.value));
+  bgHexIn.addEventListener("input", () => {
+    let v = bgHexIn.value.trim();
+    if (!v.startsWith("#")) v = "#" + v;
+    if (/^#[0-9a-f]{6}$/i.test(v)) { bgHex = v.toLowerCase(); bgColorIn.value = bgHex; requestRender(); }
+  });
+  document.getElementById("btn_bg_reset").addEventListener("click", () => setBgColor(BG_DEFAULT));
+  bgColorIn.value = bgHexIn.value = BG_DEFAULT;
+
+  // ── Colour combinations: named fill + background pairs, stored in the settings file ──
+  const HEX_RE = /^#[0-9a-f]{6}$/i;
+  // Built-in pairs sampled from the station-name reference image (text colour on bar colour).
+  let combos = [
+    { name: "Light grey · tone on tone",  fill: "#b1b1b1", bg: "#cbcbcb" },
+    { name: "Sand · tone on tone",        fill: "#a49374", bg: "#ad9b79" },
+    { name: "Ochre · tone on tone",       fill: "#9d7102", bg: "#af7c04" },
+    { name: "Rust brown · tone on tone",  fill: "#743d1b", bg: "#814520" },
+    { name: "Dark brown · tone on tone",  fill: "#5d321f", bg: "#6d3a24" },
+    { name: "Violet · tone on tone",      fill: "#4e4566", bg: "#5e5279" },
+    { name: "Red on rust brown",          fill: "#b13a00", bg: "#814520" },
+    { name: "Red on dark brown",          fill: "#b13a00", bg: "#6d3a24" },
+    { name: "Red on sand",                fill: "#b13a00", bg: "#ad9b79" },
+    { name: "Red on ochre",               fill: "#b13a00", bg: "#af7c04" },
+  ];
+  const comboPick = document.getElementById("combo_pick");
+  function refreshCombos(selected) {
+    comboPick.innerHTML = `<option value="">Choose a combination…</option>` +
+      combos.map((c, i) => `<option value="${i}">${esc(c.name)} (${c.fill.toUpperCase()} / ${c.bg.toUpperCase()})</option>`).join("");
+    comboPick.value = selected !== undefined ? String(selected) : "";
+  }
+  comboPick.addEventListener("change", () => {
+    const c = combos[parseInt(comboPick.value, 10)];
+    if (!c) return;
+    setFillColor(c.fill);
+    setBgColor(c.bg);
+  });
+  document.getElementById("btn_combo_save").addEventListener("click", () => {
+    const name = prompt("Name for this colour combination:", `Combination ${combos.length + 1}`);
+    if (name === null || !name.trim()) return;
+    combos.push({ name: name.trim(), fill: fillHex, bg: bgHex });
+    refreshCombos(combos.length - 1);
+  });
+  document.getElementById("btn_combo_delete").addEventListener("click", () => {
+    const i = parseInt(comboPick.value, 10);
+    if (!combos[i]) return;
+    combos.splice(i, 1);
+    refreshCombos();
+  });
+
   let lastScene = null;
 
   // unit: output units per screen pixel, used for annotations offset by offPx (canvas 1, print in mm).
@@ -1505,6 +1618,10 @@
         if (ss) defs.push({ win:"letter", col: LINE, label: `Letter "${L.ch}" stroke thickness`, val: ss.replace(/^stroke /, "") });
       }
     }
+    if (want("colour")) {
+      defs.push({ win:"colour", col: fillHex, label: "Fill colour", val: fillHex.toUpperCase() });
+      defs.push({ win:"colour", col: bgHex, label: "Background colour", val: bgHex.toUpperCase() });
+    }
     return defs.filter(d => want(d.win));
   }
 
@@ -1554,7 +1671,7 @@
   }
 
   // ── Export selection ──
-  const exportPick = { single:true, grid:true, strip:true, text:true, letter:true };
+  const exportPick = { single:true, grid:true, strip:true, text:true, letter:true, colour:true };
   for (const b of document.querySelectorAll(".win-opt[data-export]")) {
     b.addEventListener("click", () => {
       const k = b.dataset.export;
@@ -1757,7 +1874,7 @@
     return s;
   }
 
-  function textPrintScene() {
+  function textPrintScene(withOutline) {
     const tm = getTextModel();
     const elems = { textDots1: [], textDots2: [], textDots3: [], textOutline: [] };
     if (tm.empty || tm.tooMany) return { elems, r: 1, model: tm };
@@ -1766,7 +1883,7 @@
       if (!textSegOn[d.seg]) continue;
       groups[d.seg].push({ t:"circle", x: d.x, y: -d.y, r: tm.dMax / 2 * tm.pct[d.seg] / 100 });
     }
-    if (outlineOn.text) {
+    if (withOutline) {
       for (const c of tm.chars) {
         if (!c.ch.trim()) continue;
         elems.textOutline.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm, font: tm.fontCss,
@@ -1776,7 +1893,7 @@
     return { elems, r: tm.dMax / 2, model: tm };
   }
 
-  function buildPrintSVG(scene, legendDefs, title, infoLine, pageW, pageH, scaleSel) {
+  function buildPrintSVG(scene, legendDefs, title, infoLine, pageW, pageH, scaleSel, bg) {
     const margin = 10;
     const legendRowH = 5;
     const footerH = 8 + legendDefs.length * legendRowH;
@@ -1860,6 +1977,7 @@
 
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${pageW}mm" height="${pageH}mm" viewBox="0 0 ${pageW} ${pageH}">` +
       `<rect x="0" y="0" width="${pageW}" height="${pageH}" fill="#ffffff"/>` +
+      (bg ? `<rect x="${diagLeft}" y="${diagTop}" width="${availW}" height="${availH}" fill="${bg}"/>` : "") +
       header + shapes + footer + `</svg>`;
   }
 
@@ -1872,8 +1990,8 @@
     for (const k of exportKeys()) {
       const wd = WINDOWS.find(w => w.key === k);
       let pageScene, infoLine = paramLine;
-      if (k === "text") {
-        const ts = textPrintScene();
+      if (k === "text" || k === "colour") {
+        const ts = textPrintScene(k === "text" && outlineOn.text);
         pageScene = ts;
         const tm = ts.model;
         if (!tm.empty && !tm.tooMany) {
@@ -1892,7 +2010,7 @@
       }
       if (!hasShapes(pageScene)) { skipped.push(wd.title); continue; }
       pages.push(buildPrintSVG(pageScene, buildLegendDefs(p, g, scene, [k]), wd.title, infoLine,
-                               pageW, pageH, scaleSel));
+                               pageW, pageH, scaleSel, k === "colour" ? bgHex : null));
     }
     return { pages, skipped };
   }
@@ -1934,6 +2052,7 @@
     textQueued = false;
     redrawTextWindow();
     redrawWindow("letter");
+    redrawWindow("colour");
     if (lastScene) updateCalcPanel(lastScene.p, lastScene.scene);
   }
   function flushRender() {
@@ -1981,6 +2100,8 @@
       app: SETTINGS_APP, version: SETTINGS_VERSION, saved: new Date().toISOString(),
       params: p,
       fillColor: fillHex,
+      backgroundColor: bgHex,
+      colourCombinations: combos.map(c => ({ name: c.name, fill: c.fill, bg: c.bg })),
       text: { value: textInput.value, height: textHeightMm(), font: textFontIn.value, sizesShown: textSegOn.slice() },
       letter: { index: letterIdx, thickness: letterDimsOn },
       windows: Object.assign({}, winOpen),
@@ -2017,6 +2138,16 @@
       fillColorIn.value = fillHexIn.value = s.fillColor.toLowerCase();
       applyFillColor(s.fillColor);
     }
+    if (typeof s.backgroundColor === "string" && HEX_RE.test(s.backgroundColor)) {
+      bgHex = s.backgroundColor.toLowerCase();
+      bgColorIn.value = bgHexIn.value = bgHex;
+    }
+    if (Array.isArray(s.colourCombinations)) {
+      combos = s.colourCombinations
+        .filter(c => c && typeof c.name === "string" && HEX_RE.test(c.fill) && HEX_RE.test(c.bg))
+        .map(c => ({ name: c.name, fill: c.fill.toLowerCase(), bg: c.bg.toLowerCase() }));
+      refreshCombos();
+    }
     const t = s.text || {};
     if (typeof t.value === "string") textInput.value = t.value.slice(0, 15);
     if (Number.isFinite(Number(t.height))) textHeightIn.value = Number(t.height);
@@ -2044,7 +2175,7 @@
     if (typeof ex.scale === "string" && selectHas(scaleEl, ex.scale)) scaleEl.value = ex.scale;
 
     textModelCache = null; letterCache = null;
-    setTextZoom(1); setLetterZoom(1);
+    setTextZoom(1); setLetterZoom(1); setColourZoom(1);
     render();
     loadTextFont();
   }
@@ -2060,6 +2191,7 @@
       .catch(err => alert("Could not load the settings: " + err.message));
   });
 
+  refreshCombos();  // after esc() is defined
   window.addEventListener("resize", requestRender);
   render();
 })();
