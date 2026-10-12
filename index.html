@@ -332,6 +332,11 @@
     </div>
     <button class="tool" id="btn_pdf">Print / Save as PDF (one page per window, to scale)</button>
 
+    <div class="section">Settings</div>
+    <button class="tool" id="btn_save_settings">Save settings (.json)</button>
+    <button class="tool" id="btn_load_settings">Load settings…</button>
+    <input type="file" id="settings_file" accept=".json,application/json" style="display:none">
+
     <div class="section">Legend</div>
     <div class="legend" id="legend"></div>
 
@@ -387,6 +392,7 @@
         <label class="count" for="letter_pick">Letter</label>
         <select id="letter_pick" class="letter-pick"></select>
         <button class="win-opt" id="letter_fit" title="Fit the letter to the window">Fit</button>
+        <button class="win-opt on" id="letter_dims" title="Show / hide the stroke thickness">Thickness</button>
         <span class="count" id="letter_info"></span>
       </div>
       <canvas></canvas>
@@ -439,7 +445,7 @@
 
   // ── Windows: each draws its scene groups or its own draw function ──
   const WINDOWS = [
-    { key:"single", title:"Single point",   groups:["boundary","fill","baseline","dim_h_pitch","dim_h_gap","dim_v_sp","bar","crosshair"] },
+    { key:"single", title:"Single point",   groups:["boundary","fill","axes","dim_point","baseline","dim_h_pitch","dim_h_gap","dim_v_sp","bar","crosshair"] },
     { key:"grid",   title:"Gradient principle", groups:["grid","gridFill","gridDim"] },
     { key:"strip",  title:"Gradient strip", groups:["strip1","strip2","strip3","stripFill1","stripFill2","stripFill3","stripDim","stripLabel"] },
     { key:"text",   title:"Text",           groups:[], draw: (g, w, h) => drawTextWindow(g, w, h) },
@@ -521,6 +527,7 @@
   function fillDisk(R, g) {
     const { r, pitch, v_sp, bar_dx, bar_dy } = g;
     const fill = [];
+    const cols = new Set();
     let tooDense = false;
     const bar_dx_safe = Math.max(Math.abs(bar_dx), 1e-6);
     const estCellArea = pitch * v_sp * bar_dx_safe;
@@ -540,14 +547,14 @@
         for (let n = n0; n <= n1; n++) {
           const x = n * pitch * bar_dx;
           const y = -k * v_sp + n * pitch * bar_dy;
-          if (Math.hypot(x, y) + r <= R) fill.push({ t:"circle", x, y, r });
+          if (Math.hypot(x, y) + r <= R) { fill.push({ t:"circle", x, y, r }); cols.add(n); }
           if (fill.length > MAX_POINTS) { tooDense = true; break; }
         }
         if (tooDense) break;
       }
     }
-    if (tooDense) fill.length = 0;
-    return { fill, tooDense };
+    if (tooDense) { fill.length = 0; cols.clear(); }
+    return { fill, tooDense, cols: [...cols] };
   }
 
   function buildScene(p) {
@@ -556,16 +563,25 @@
     const a_deg = a_rad * 180 / Math.PI;
     const small_d = p.small_d, h_gap = p.h_gap;
 
-    const elems = { boundary:[], fill:[], baseline:[], dim_h_pitch:[], dim_h_gap:[], dim_v_sp:[], bar:[], crosshair:[], grid:[], gridFill:[], gridDim:[],
+    const elems = { boundary:[], fill:[], axes:[], dim_point:[], baseline:[], dim_h_pitch:[], dim_h_gap:[], dim_v_sp:[], bar:[], crosshair:[], grid:[], gridFill:[], gridDim:[],
                     strip1:[], strip2:[], strip3:[], stripFill1:[], stripFill2:[], stripFill3:[], stripDim:[], stripLabel:[] };
 
     elems.boundary.push({ t:"circle", x:0, y:0, r:R });
 
     const mainFill = fillDisk(R, g);
     elems.fill = mainFill.fill;
+
+    // Annotations: boundary diameter below the circle, fill circle diameter on the circle nearest the centre.
+    elems.dim_point.push({ t:"dim_h", x0: -R, x1: R, y: -R, offPx: 30, label: `⌀ ${p.big_d.toFixed(2)} mm boundary` });
+    if (mainFill.fill.length) {
+      const f = mainFill.fill.reduce((a, b) => Math.hypot(b.x, b.y) < Math.hypot(a.x, a.y) ? b : a);
+      elems.dim_point.push({ t:"dim_h", x0: f.x - r, x1: f.x + r, y: f.y, label: `⌀ ${small_d.toFixed(2)} mm fill` });
+    }
     const tooDense = mainFill.tooDense;
 
-    const half = 3;
+    // The stagger preview gets one nozzle per column of the point (at least 3 each side),
+    // so every vertical axis ends on a nozzle centre.
+    const half = Math.max(3, ...mainFill.cols.map(Math.abs));
     // Reference bars, laid out from the geometry so nothing overlaps.
     const pinkSpread  = half * pitch * Math.abs(bar_dy);
     const clearMargin = Math.max(small_d, pitch) * 1.8 + 4;
@@ -578,6 +594,14 @@
     elems.bar.push({ t:"line", x0:p0[0], y0:p0[1], x1:p1[0], y1:p1[1] });
     elems.bar.push({ t:"line_dash", x0:p0[0], y0:p0[1]-v_sp, x1:p1[0], y1:p1[1]-v_sp });
     for (const [nx, ny] of pink_nozzles) elems.bar.push({ t:"circle", x:nx, y:ny - v_sp, r });
+
+    // Vertical construction axes: one per column of fill circles, from the bottom of the
+    // boundary up through the point to the matching nozzle centre of the stagger preview.
+    for (const n of mainFill.cols) {
+      const x = n * pitch * bar_dx;
+      if (Math.abs(x) >= R) continue;
+      elems.axes.push({ t:"line", x0: x, y0: -Math.sqrt(R*R - x*x), x1: x, y1: pink_cy + n * pitch * bar_dy });
+    }
 
     const dim_vx = p1[0] + r * 2.5;
     elems.dim_v_sp.push({ t:"dim_v", x:dim_vx, y0:pink_cy - v_sp, y1:pink_cy, label:`V  ${v_sp.toFixed(2)} mm` });
@@ -709,28 +733,30 @@
   // ── Canvas rendering ────────────────────────────────────────
   const stage = document.getElementById("stage");
 
-  // Tiles the open windows into rows (shared by the UI and the PNG export).
+  // Tiles the open windows (shared by the UI and the PNG export).
+  // Bands are stacked vertically; each band holds columns, each column stacks its windows.
+  // Top two thirds: single point on the left, grid over strip on the right. Bottom third: text + letter.
   function layoutRects(keys, W, H, gap) {
     const rects = {};
-    const ROWS = [
-      { keys: ["single", "grid"], wt: 1 },
-      { keys: ["strip"],          wt: 1 },
-      { keys: ["text", "letter"], wt: 1 },
+    const BANDS = [
+      { wt: 2, cols: [{ keys: ["single"], wt: 1 }, { keys: ["grid", "strip"], wt: 1 }] },
+      { wt: 1, cols: [{ keys: ["text"],   wt: 2 }, { keys: ["letter"],        wt: 1 }] },
     ];
-    const COL_WT = { text: 2 };
-    const rows = ROWS.map(r => ({ keys: r.keys.filter(k => keys.includes(k)), wt: r.wt }))
-                     .filter(r => r.keys.length);
-    const totalWt = rows.reduce((a, r) => a + r.wt, 0);
-    const availH = H - gap * (rows.length - 1);
+    const bands = BANDS.map(b => ({ wt: b.wt, cols: b.cols.map(c => ({ wt: c.wt, keys: c.keys.filter(k => keys.includes(k)) }))
+                                                        .filter(c => c.keys.length) }))
+                       .filter(b => b.cols.length);
+    const totalWt = bands.reduce((a, b) => a + b.wt, 0);
+    const availH = H - gap * (bands.length - 1);
     let y = 0;
-    rows.forEach((row, ri) => {
-      const h = ri === rows.length - 1 ? H - y : Math.round(availH * row.wt / totalWt);
-      const availW = W - gap * (row.keys.length - 1);
-      const cw = row.keys.reduce((a, k) => a + (COL_WT[k] || 1), 0);
+    bands.forEach((band, bi) => {
+      const h = bi === bands.length - 1 ? H - y : Math.round(availH * band.wt / totalWt);
+      const availW = W - gap * (band.cols.length - 1);
+      const cw = band.cols.reduce((a, c) => a + c.wt, 0);
       let x = 0;
-      row.keys.forEach(k => {
-        const w = availW * (COL_WT[k] || 1) / cw;
-        rects[k] = { x, y, w, h };
+      band.cols.forEach(col => {
+        const w = availW * col.wt / cw;
+        const wh = (h - gap * (col.keys.length - 1)) / col.keys.length;
+        col.keys.forEach((k, i) => { rects[k] = { x, y: y + i * (wh + gap), w, h: wh }; });
         x += w + gap;
       });
       y += h + gap;
@@ -972,6 +998,68 @@
   const letterView = { zoom: 1, panX: 0, panY: 0 };
   let letterIdx = -1;
   let letterCache = null;
+  let letterDimsOn = true;
+
+  // ── Stroke thickness: render the glyph large and cut it horizontally and vertically ──
+  const strokeMask = document.createElement("canvas");
+  const strokeCtx = strokeMask.getContext("2d", { willReadFrequently: true });
+  const STROKE_PX = 600;  // font size of the measuring render
+  function measureStrokes(c, fontCss, fontMm) {
+    const mc = strokeCtx;
+    mc.font = `${STROKE_PX}px ${fontCss}`;
+    const m = mc.measureText(c.ch);
+    const bl = Math.ceil(m.actualBoundingBoxLeft), br = Math.ceil(m.actualBoundingBoxRight);
+    const ba = Math.ceil(m.actualBoundingBoxAscent), bd = Math.ceil(m.actualBoundingBoxDescent);
+    const inkW = bl + br, inkH = ba + bd;
+    if (inkW < 4 || inkH < 4) return { h: [], v: [] };
+    const W = inkW + 4, H = inkH + 4;
+    strokeMask.width = W; strokeMask.height = H;
+    mc.font = `${STROKE_PX}px ${fontCss}`;
+    mc.textAlign = "left"; mc.textBaseline = "alphabetic"; mc.fillStyle = "#000";
+    const ox = 2 + bl, oy = 2 + ba;
+    mc.fillText(c.ch, ox, oy);
+    const data = mc.getImageData(0, 0, W, H).data;
+    const ink = (x, y) => data[(y * W + x) * 4 + 3] >= 128;
+    // Filled runs along one cut; runs spanning most of the letter are not strokes (e.g. the stem of "I" cut vertically).
+    function runs(n, test, maxLen) {
+      const out = [];
+      let a = -1;
+      for (let i = 0; i <= n; i++) {
+        const on = i < n && test(i);
+        if (on && a < 0) a = i;
+        if (!on && a >= 0) { if (i - a >= 2 && i - a <= maxLen) out.push([a, i]); a = -1; }
+      }
+      return out;
+    }
+    // Try a few cut positions and keep the one that crosses the most strokes.
+    function best(fracs, cut) {
+      let pick = { at: 0, list: [] };
+      for (const f of fracs) { const r = cut(f); if (r.list.length > pick.list.length) pick = r; }
+      return pick;
+    }
+    const k = fontMm / STROKE_PX;  // mm per px
+    const hc = best([0.5, 0.3, 0.7], f => {
+      const y = Math.min(H - 1, Math.round(2 + f * inkH));
+      return { at: y, list: runs(W, x => ink(x, y), inkW * 0.6) };
+    });
+    const vc = best([0.5, 0.3, 0.7], f => {
+      const x = Math.min(W - 1, Math.round(2 + f * inkW));
+      return { at: x, list: runs(H, y => ink(x, y), inkH * 0.6) };
+    });
+    const X = px => c.x + (px - ox) * k, Y = py => -(py - oy) * k;  // to letter mm, y up
+    return {
+      h: hc.list.map(([a, b]) => ({ x0: X(a), x1: X(b), y: Y(hc.at + 0.5), w: (b - a) * k })),
+      v: vc.list.map(([a, b]) => ({ x: X(vc.at + 0.5), y0: Y(b), y1: Y(a), w: (b - a) * k })),
+    };
+  }
+  function strokeSummary(L) {
+    if (!L || !L.ok || !L.strokes.length) return "";
+    const mn = Math.min(...L.strokes), mx = Math.max(...L.strokes), pitch = L.tm.pitch;
+    const mm = mn.toFixed(0) === mx.toFixed(0) ? `${mn.toFixed(0)} mm` : `${mn.toFixed(0)}–${mx.toFixed(0)} mm`;
+    const pts = (mn / pitch).toFixed(1) === (mx / pitch).toFixed(1) ? (mn / pitch).toFixed(1)
+      : `${(mn / pitch).toFixed(1)}–${(mx / pitch).toFixed(1)}`;
+    return `stroke ${mm} ≈ ${pts} points`;
+  }
 
   function refreshLetterOptions() {
     const tm = getTextModel();
@@ -991,9 +1079,9 @@
     refreshLetterOptions();
     const tm = getTextModel();
     const sc = lastScene && lastScene.scene;
-    const empty = { elems: { letterRings: [], letterFill: [], letterGlyph: [] }, r: 1, ok: false, tm };
+    const empty = { elems: { letterRings: [], letterFill: [], letterGlyph: [], letterDim: [] }, r: 1, ok: false, tm };
     if (!sc || tm.empty || tm.tooMany || letterIdx < 0 || !tm.chars[letterIdx]) return empty;
-    const key = [tm.key, letterIdx, textSegOn.join(""), outlineOn.letter, sceneCache ? sceneCache.key : ""].join("|");
+    const key = [tm.key, letterIdx, textSegOn.join(""), outlineOn.letter, letterDimsOn, sceneCache ? sceneCache.key : ""].join("|");
     if (letterCache && letterCache.key === key) return letterCache;
 
     const c = tm.chars[letterIdx];
@@ -1006,7 +1094,7 @@
     const shownFill = shown.reduce((a, d) => a + fillPer[d.seg], 0);
     const tooMany = shownFill > LETTER_MAX_FILL;
 
-    const elems = { letterRings: [], letterFill: [], letterGlyph: [] };
+    const elems = { letterRings: [], letterFill: [], letterGlyph: [], letterDim: [] };
     for (const d of shown) {
       const cx = d.x, cy = -d.y;
       elems.letterRings.push({ t:"circle", x: cx, y: cy, r: sc.segR[d.seg] });
@@ -1016,6 +1104,12 @@
       elems.letterGlyph.push({ t:"glyph", ch: c.ch, x: c.x, y: 0, size: tm.fontMm, font: tm.fontCss,
                                bx0: c.left, by0: -tm.bottom, bx1: c.right, by1: -tm.top });
     }
+    const st = measureStrokes(c, tm.fontCss, tm.fontMm);
+    const strokes = st.h.concat(st.v).map(r => r.w);
+    if (letterDimsOn) {
+      for (const r of st.h) elems.letterDim.push({ t:"dim_h", x0: r.x0, x1: r.x1, y: r.y, label: `${r.w.toFixed(0)} mm` });
+      for (const r of st.v) elems.letterDim.push({ t:"dim_v", x: r.x, y0: r.y0, y1: r.y1, label: `${r.w.toFixed(0)} mm` });
+    }
     const R0 = sc.segR[0];
     let bx0 = c.left, bx1 = c.right, by0 = -tm.bottom, by1 = -tm.top;
     for (const d of dots) {
@@ -1023,7 +1117,7 @@
       by0 = Math.min(by0, -d.y - R0); by1 = Math.max(by1, -d.y + R0);
     }
     letterCache = { key, elems, r: R0, ok: true, tm, ch: c.ch, idx: letterIdx, counts, fillPer, fillTotal,
-                    total: dots.length, tooMany, box: { bx0, bx1, by0, by1 } };
+                    total: dots.length, tooMany, strokes, box: { bx0, bx1, by0, by1 } };
     return letterCache;
   }
 
@@ -1077,7 +1171,19 @@
       g.fill();
     }
 
+    for (const it of L.elems.letterDim) {
+      if (it.t === "dim_h") {
+        const [x0, y] = P(it.x0, it.y), [x1] = P(it.x1, it.y);
+        dimH(g, x0, x1, y, LINE, it.label);
+      } else if (it.t === "dim_v") {
+        const [x, y0] = P(it.x, it.y0), [, y1] = P(it.x, it.y1);
+        dimV(g, x, y1, y0, LINE, it.label);
+      }
+    }
+
+    const ss = strokeSummary(L);
     haloText(g, 10, h - 10, `"${L.ch}" · ${((bx1 - bx0) / 1000).toFixed(2)} × ${((by1 - by0) / 1000).toFixed(2)} m` +
+      (ss ? " · " + ss : "") +
       (L.tooMany ? " · too many fill circles to draw, showing main circles" : ""), COL.MUTED, "left");
   }
 
@@ -1092,6 +1198,12 @@
     setLetterZoom(1);
   });
   document.getElementById("letter_fit").addEventListener("click", () => setLetterZoom(1));
+  document.getElementById("letter_dims").addEventListener("click", e => {
+    letterDimsOn = !letterDimsOn;
+    e.currentTarget.classList.toggle("on", letterDimsOn);
+    redrawWindow("letter");
+    if (lastScene) updateCalcPanel(lastScene.p, lastScene.scene);
+  });
 
   // ── Shared window helpers ──
   function redrawWindow(key) {
@@ -1189,6 +1301,8 @@
   const STYLE = {
     boundary:    { col: LINE, lw: 2 },
     fill:        { col: LINE, lw: 1, fill: true, fillColor: FILL_DEFAULT },
+    axes:        { col: LINE, lw: 0.75, dashDot: true },
+    dim_point:   { col: LINE, lw: 1 },
     baseline:    { col: LINE, lw: 1, dashLine: true },
     dim_h_gap:   { col: LINE, lw: 1 },
     dim_h_pitch: { col: LINE, lw: 1 },
@@ -1213,6 +1327,7 @@
     letterRings: { col: LINE, lw: 1 },
     letterFill:  { col: FILL_DEFAULT, lw: 0.5, fill: true, fillColor: FILL_DEFAULT },
     letterGlyph: { col: LINE, lw: 1 },
+    letterDim:   { col: LINE, lw: 1 },
   };
 
   // ── Fill point colour ──
@@ -1304,7 +1419,7 @@
         if (it.t === "line") {
           const [x0,y0] = px(it.x0, it.y0), [x1,y1] = px(it.x1, it.y1);
           g.beginPath();
-          if (st.dashLine) g.setLineDash([5,3]); else g.setLineDash([]);
+          g.setLineDash(st.dashDot ? [10,3,2,3] : st.dashLine ? [5,3] : []);
           g.moveTo(x0,y0); g.lineTo(x1,y1); g.stroke();
           g.setLineDash([]);
         } else if (it.t === "line_dash") {
@@ -1381,6 +1496,8 @@
                     val: `${L.counts.join(" / ")} · ${L.total} pcs` });
         defs.push({ win:"letter", col: fillHex, label: `Letter "${L.ch}" fill circles`,
                     val: `⌀ ${p.small_d.toFixed(2)} mm · ${L.fillPer.join(" / ")} each · ${L.fillTotal} pcs` });
+        const ss = strokeSummary(L);
+        if (ss) defs.push({ win:"letter", col: LINE, label: `Letter "${L.ch}" stroke thickness`, val: ss.replace(/^stroke /, "") });
       }
     }
     return defs.filter(d => want(d.win));
@@ -1605,10 +1722,10 @@
     for (const [sv, label] of STANDARD_SCALES) if (Math.abs(sv - s) < 1e-6) return label;
     return s >= 1 ? `${s.toFixed(2)}:1` : `1:${(1/s).toFixed(2)}`;
   }
-  const PRINT_LW = { boundary:0.35, fill:0.15, baseline:0.2, dim_h_gap:0.15, dim_h_pitch:0.15, dim_v_sp:0.15, bar:0.3, crosshair:0.1, grid:0.35, gridFill:0.15, gridDim:0.15,
+  const PRINT_LW = { boundary:0.35, fill:0.15, axes:0.08, dim_point:0.15, baseline:0.2, dim_h_gap:0.15, dim_h_pitch:0.15, dim_v_sp:0.15, bar:0.3, crosshair:0.1, grid:0.35, gridFill:0.15, gridDim:0.15,
                      strip1:0.25, strip2:0.25, strip3:0.25, stripFill1:0.1, stripFill2:0.1, stripFill3:0.1, stripDim:0.15, stripLabel:0.15,
                      textDots1:0.05, textDots2:0.05, textDots3:0.05, textOutline:0.2,
-                     letterRings:0.2, letterFill:0.02, letterGlyph:0.25 };
+                     letterRings:0.2, letterFill:0.02, letterGlyph:0.25, letterDim:0.15 };
   const n2 = v => Number(v).toFixed(3);
   const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 
@@ -1700,7 +1817,7 @@
           shapes += `<circle cx="${n2(cxp)}" cy="${n2(cyp)}" r="${n2(rp)}" stroke="${noStroke ? "none" : st.col}" stroke-width="${lw}" fill="${fillAttr}" ${noStroke ? "" : dashAttr}/>`;
         } else if (it.t === "line" || it.t === "line_dash") {
           const [x0,y0] = px(it.x0, it.y0), [x1,y1] = px(it.x1, it.y1);
-          const dash = it.t === "line_dash" ? `stroke-dasharray="1,1"` : (st.dashLine ? `stroke-dasharray="1.5,1"` : "");
+          const dash = it.t === "line_dash" ? `stroke-dasharray="1,1"` : (st.dashDot ? `stroke-dasharray="2.5,0.8,0.4,0.8"` : st.dashLine ? `stroke-dasharray="1.5,1"` : "");
           shapes += `<line x1="${n2(x0)}" y1="${n2(y0)}" x2="${n2(x1)}" y2="${n2(y1)}" stroke="${st.col}" stroke-width="${lw}" ${dash}/>`;
         } else if (it.t === "dim_h") {
           const [x0,y0] = px(it.x0, it.y), [x1] = px(it.x1, it.y);
@@ -1850,6 +1967,96 @@
     updateCalcPanel(p, scene);
     updateTextBar();
   }
+
+  // ── Settings: save all parameters to a .json file and load them again ──
+  const SETTINGS_APP = "DuesseldorfPointGen", SETTINGS_VERSION = 1;
+  const setClassOn = (sel, map) => { for (const b of document.querySelectorAll(sel)) b.classList.toggle("on", !!map(b)); };
+
+  function collectSettings() {
+    const p = {};
+    for (const [key] of fields) p[key] = params[key];
+    return {
+      app: SETTINGS_APP, version: SETTINGS_VERSION, saved: new Date().toISOString(),
+      params: p,
+      fillColor: fillHex,
+      text: { value: textInput.value, height: textHeightMm(), font: textFontIn.value, sizesShown: textSegOn.slice() },
+      letter: { index: letterIdx, thickness: letterDimsOn },
+      windows: Object.assign({}, winOpen),
+      outlines: Object.assign({}, outlineOn),
+      export: { windows: Object.assign({}, exportPick),
+                paper: document.getElementById("paper_size").value,
+                scale: document.getElementById("print_scale").value },
+    };
+  }
+
+  function saveSettings() {
+    flushRender();
+    const blob = new Blob([JSON.stringify(collectSettings(), null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.download = `dpg_settings_${new Date().toISOString().slice(0, 10)}.json`;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  // Applies only the known, valid entries; anything missing keeps its current value.
+  function applySettings(s) {
+    if (!s || typeof s !== "object" || s.app !== SETTINGS_APP) throw new Error("This is not a Düsseldorf Point Generator settings file.");
+    const isBool = v => typeof v === "boolean";
+    const selectHas = (el, v) => Array.from(el.options).some(o => o.value === v);
+    if (s.params) for (const [key, rid, nid] of fields) {
+      const v = Number(s.params[key]);
+      if (!Number.isFinite(v)) continue;
+      params[key] = v;
+      document.getElementById(rid).value = v;
+      document.getElementById(nid).value = v;
+    }
+    if (typeof s.fillColor === "string" && /^#[0-9a-f]{6}$/i.test(s.fillColor)) {
+      fillColorIn.value = fillHexIn.value = s.fillColor.toLowerCase();
+      applyFillColor(s.fillColor);
+    }
+    const t = s.text || {};
+    if (typeof t.value === "string") textInput.value = t.value.slice(0, 15);
+    if (Number.isFinite(Number(t.height))) textHeightIn.value = Number(t.height);
+    if (typeof t.font === "string" && selectHas(textFontIn, t.font)) textFontIn.value = t.font;
+    if (Array.isArray(t.sizesShown)) t.sizesShown.slice(0, 3).forEach((v, i) => { if (isBool(v)) textSegOn[i] = v; });
+    textSegBtns.forEach((b, i) => b.classList.toggle("on", textSegOn[i]));
+    const L = s.letter || {};
+    if (Number.isInteger(L.index)) letterIdx = L.index;
+    if (isBool(L.thickness)) letterDimsOn = L.thickness;
+    document.getElementById("letter_dims").classList.toggle("on", letterDimsOn);
+    for (const k in winOpen) {
+      if (s.windows && isBool(s.windows[k])) winOpen[k] = s.windows[k];
+      if (s.outlines && isBool(s.outlines[k])) outlineOn[k] = s.outlines[k];
+      if (s.export && s.export.windows && isBool(s.export.windows[k])) exportPick[k] = s.export.windows[k];
+    }
+    updateWinButtons();
+    for (const b of document.querySelectorAll(".win-opt[data-outline]")) {
+      b.title = outlineOn[b.dataset.outline] ? "Hide outlines" : "Show outlines";
+    }
+    setClassOn(".win-opt[data-outline]", b => outlineOn[b.dataset.outline]);
+    setClassOn(".win-opt[data-export]", b => exportPick[b.dataset.export]);
+    const ex = s.export || {};
+    const paperEl = document.getElementById("paper_size"), scaleEl = document.getElementById("print_scale");
+    if (typeof ex.paper === "string" && selectHas(paperEl, ex.paper)) paperEl.value = ex.paper;
+    if (typeof ex.scale === "string" && selectHas(scaleEl, ex.scale)) scaleEl.value = ex.scale;
+
+    textModelCache = null; letterCache = null;
+    setTextZoom(1); setLetterZoom(1);
+    render();
+    loadTextFont();
+  }
+
+  const settingsFile = document.getElementById("settings_file");
+  document.getElementById("btn_save_settings").addEventListener("click", saveSettings);
+  document.getElementById("btn_load_settings").addEventListener("click", () => settingsFile.click());
+  settingsFile.addEventListener("change", () => {
+    const file = settingsFile.files[0];
+    settingsFile.value = "";  // allow loading the same file twice
+    if (!file) return;
+    file.text().then(txt => applySettings(JSON.parse(txt)))
+      .catch(err => alert("Could not load the settings: " + err.message));
+  });
 
   window.addEventListener("resize", requestRender);
   render();
